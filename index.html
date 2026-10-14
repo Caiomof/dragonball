@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a202b" />
     <meta name="description" content="Dragon Ball RPG: Origens — um protótipo de aventura 3D estilizada." />
-    <title>Dragon Ball RPG — Origens · v0.1</title>
+    <title>Dragon Ball RPG — Origens · v0.1.6</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
@@ -15,7 +15,7 @@
     <div id="ui-root">
       <header class="topline" id="topline">
         <div class="brand-mark"><span class="brand-icon">✦</span><span>DRAGON BALL <b>RPG</b></span></div>
-        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.1</span>
+        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.1.6</span>
         <button id="sound-toggle" class="sound-toggle" type="button" aria-label="Alternar áudio">♫ <span>SOM ON</span></button>
       </header>
 
@@ -28,7 +28,7 @@
           <p>Todo guerreiro começa de algum lugar. Descubra sua origem, desperte seu Ki e escreva sua própria lenda.</p>
           <div class="menu-actions">
             <button id="start-button" class="button button-primary" type="button"><span class="button-diamond">◆</span> COMEÇAR JORNADA <span class="button-arrow">→</span></button>
-            <button id="about-button" class="button button-subtle" type="button">SOBRE O PROTÓTIPO <span>↗</span></button>
+            <button id="settings-main" class="button button-subtle" type="button">⚙ CONFIGURAÇÕES</button><button id="about-button" class="button button-subtle" type="button">SOBRE O PROTÓTIPO <span>↗</span></button>
           </div>
           <div class="menu-features"><span>✧ MUNDO 3D</span><span>✧ QUATRO RAÇAS</span><span>✧ DOMINE O KI</span></div>
         </div>
@@ -36,6 +36,12 @@
         <div class="menu-bottom"><span>UM PROJETO DE FÃ · VERSÃO EXPERIMENTAL</span><span>CRIADO PARA SER JOGADO, NÃO APENAS VISTO</span></div>
       </section>
 
+      <section id="character-screen" class="screen panel-screen character-screen hidden" aria-label="Seus guerreiros">
+        <div class="character-card panel-card"><div class="eyebrow">ARQUIVO DOS GUERREIROS</div><h2>ESCOLHA SUA <em>LENDA.</em></h2>
+        <p>Crie vários personagens, experimente estilos e continue do ponto em que parou. Seus guerreiros ficam salvos neste navegador.</p>
+        <div id="character-list" class="character-list"></div>
+        <div class="character-actions"><button id="character-create" type="button" class="button button-primary">✦ CRIAR NOVO GUERREIRO →</button><button id="character-back" type="button" class="button button-subtle">← MENU</button></div>
+        </div></section>
       <section id="race-screen" class="screen race-screen hidden" aria-label="Seleção de raça">
         <div class="race-sidebar">
           <button id="race-back" class="back-link" type="button">← VOLTAR AO MENU</button>
@@ -43,9 +49,19 @@
           <h2>ESCOLHA<br /><em>SEU DESTINO.</em></h2>
           <p class="race-intro">O poder está em suas mãos. Cada raça traz uma maneira diferente de começar sua jornada.</p>
           <div id="race-options" class="race-options" role="radiogroup" aria-label="Escolha sua raça"></div>
-          <button id="race-confirm" class="button button-primary race-confirm" type="button">INICIAR AVENTURA <span class="button-arrow">→</span></button>
+          <div class="creator-box"><h3>✧ PERSONALIZE SEU GUERREIRO</h3>
+          <label class="creator-line">NOME <input id="hero-name" type="text" maxlength="28" placeholder="Nome do guerreiro" value="Novo guerreiro" /></label>
+          <div class="creator-sliders">
+            <label>ALTURA <b id="height-number">100%</b><input id="hero-height" type="range" min="78" max="128" value="100" /></label>
+            <label>PORTE FÍSICO <b id="build-number">100%</b><input id="hero-build" type="range" min="72" max="150" value="100" /></label>
+          </div>
+          <div class="creator-options"><label>CABELO <select id="hero-hair"><option value="0">Espetado</option><option value="1">Curto</option><option value="2">Volumoso</option></select></label>
+          <label>BARBA <input id="hero-beard" type="checkbox" /></label>
+          <label>OLHOS <input id="hero-eye" type="color" value="#45b4e9" /></label><label>CABELO/COR <input id="hero-haircolor" type="color" value="#202436" /></label></div>
+          <p class="creator-tip">Aparência atualizada na prévia 3D. Cada raça possui atributos e visual próprios.</p></div>
+          <button id="race-confirm" class="button button-primary race-confirm" type="button">SALVAR E JOGAR <span class="button-arrow">→</span></button>
         </div>
-        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D PROCEDURAL · VISUAL V0.1</span></div>
+        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D ANIMADO · VISUAL V0.1.6</span></div>
         <div class="race-stats-panel"><span>ATRIBUTOS INICIAIS</span><div id="race-stat-rows"></div></div>
       </section>
 
@@ -56,19 +72,37 @@
           <div class="player-card"><div class="player-emblem">✦</div><div class="player-info"><span class="hud-tiny">SEU GUERREIRO</span><strong id="hud-race">SAIYAJIN</strong><span class="power-tag">PODER DE LUTA <b id="hud-power">10</b></span></div></div>
           <div class="resource"><div class="resource-label"><span><b class="dot health-dot"></b> VIDA</span><strong id="hud-health-label">100 / 100</strong></div><div class="resource-track"><div class="resource-fill health-fill" id="hud-health-fill"></div></div></div>
           <div class="resource"><div class="resource-label"><span><b class="dot ki-dot"></b> ENERGIA KI</span><strong id="hud-ki-label">120 / 120</strong></div><div class="resource-track"><div class="resource-fill ki-fill" id="hud-ki-fill"></div></div></div>
+          <div class="resource"><div class="resource-label"><span><b class="dot stamina-dot"></b> STAMINA</span><strong id="hud-stamina-label">100 / 100</strong></div><div class="resource-track"><div class="resource-fill stamina-fill" id="hud-stamina-fill"></div></div></div>
         </div>
         <div class="world-label"><span class="world-glyph">◇</span><div><span>REGIÃO INICIAL</span><strong>PLANÍCIE ESMERALDA</strong></div><small>FIM DE TARDE · 17:42</small></div>
-        <div class="reticle"><span></span><span></span><span></span><span></span><b></b></div>
+        <div class="reticle" id="aim-reticle"><span></span><span></span><span></span><span></span><b></b></div>
         <div id="target-indicator" class="target-indicator hidden"><span class="target-name">◈ TOTEM DE TREINAMENTO</span><div class="target-bar"><div id="target-health-fill"></div></div><small id="target-health-label">100 / 100</small></div>
-        <div class="hud-bottom-left"><div class="hud-hint-title">CONTROLES</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVER</span></div><div><kbd>SHIFT</kbd><span>CORRER</span><kbd>ESPAÇO</kbd><span>PULAR</span></div><div><kbd>ESC</kbd><span>PAUSAR</span><kbd>MOUSE</kbd><span>CÂMERA</span></div></div>
-        <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner">✦</div></div><div class="ability-copy"><span>HABILIDADE ESPECIAL</span><strong>KAMEHAMEHA</strong><small id="ability-status">CLIque esquerdo · 25 KI</small></div><span class="ability-key">M1</span></div>
-        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.1</div>
+        <div class="hud-bottom-left"><div><kbd>M1</kbd><span>SOCO / COMBO</span><kbd>M2</kbd><span>RAJADA DE KI</span></div><div><kbd>1–4</kbd><span>SEGURAR PARA CARREGAR PODER</span></div><div><kbd>ESPAÇO ×2</kbd><span>VOAR</span><kbd>CTRL</kbd><span>DESCER</span></div><div><kbd>V</kbd><span>VISÃO</span><kbd>SCROLL</kbd><span>PODER</span><kbd>K</kbd><span>HABILIDADES</span></div><div class="hud-hint-title">CONTROLES</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVER</span></div><div><kbd>SHIFT</kbd><span>CORRER</span><kbd>ESPAÇO</kbd><span>PULAR</span></div><div><kbd>ESC</kbd><span>PAUSAR</span><kbd>MOUSE</kbd><span>CÂMERA</span></div></div>
+        <div id="charge-ui" class="charge-ui hidden"><span id="charge-label">CARREGANDO KI</span><div class="charge-track"><i id="charge-fill"></i></div><small id="charge-power">1.0×</small></div>
+        <div class="skill-hotbar" id="skill-hotbar" aria-label="Barra de poderes"></div><div class="flight-indicator hidden" id="flight-indicator">✦ MODO VOO · ESPAÇO SOBE · CTRL DESCE</div>
+        <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner">✦</div></div><div class="ability-copy"><span>HABILIDADE ESPECIAL</span><strong>KAMEHAMEHA</strong><small id="ability-status">SEGURE 1–4 · SOLTE PARA DISPARAR</small></div><span class="ability-key">1–4</span></div>
+        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.1.6</div>
         <div id="toast" class="toast hidden" role="status"></div>
         <div id="combat-number-layer"></div>
       </section>
 
-      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">TEMPO PARA RESPIRAR</div><h2>JOGO <em>PAUSADO</em></h2><p>Sua jornada continua quando você estiver pronto.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR JOGANDO →</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
-      <div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.1</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Escolha uma das quatro raças, explore a Planície Esmeralda e teste seu Kamehameha no Totem de Treinamento.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
+      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">TEMPO PARA RESPIRAR</div><h2>JOGO <em>PAUSADO</em></h2><p>Sua jornada continua quando você estiver pronto.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR JOGANDO →</button><button id="open-skills" class="button button-subtle" type="button">✦ EVOLUIR HABILIDADES</button><button id="open-settings" class="button button-subtle" type="button">⚙ CONFIGURAÇÕES</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
+      <section id="settings-screen" class="screen panel-screen hidden" aria-label="Configurações do jogo">
+        <div class="panel-card"><div class="eyebrow">AJUSTE SUA EXPERIÊNCIA</div><h2>CONFIGURAÇÕES <em>DE JOGO</em></h2>
+        <label class="panel-label">CÂMERA</label><div class="panel-toggle"><button type="button" id="camera-third" class="selected">TERCEIRA PESSOA</button><button type="button" id="camera-first">PRIMEIRA PESSOA</button></div>
+        <label class="panel-label" for="fov-slider">CAMPO DE VISÃO (FOV) <strong id="fov-value">70°</strong></label><input id="fov-slider" type="range" min="55" max="105" step="1" value="70"/>
+        <label class="panel-label" for="mouse-slider">SENSIBILIDADE DO MOUSE <strong id="mouse-value">100%</strong></label><input id="mouse-slider" type="range" min="45" max="190" step="5" value="100"/>
+        <p>V alterna a câmera durante a partida. A mira acompanha o mouse capturado e determina a direção dos poderes.</p>
+        <button id="settings-close" type="button" class="button button-primary">VOLTAR →</button></div>
+      </section>
+      <section id="skills-screen" class="screen panel-screen hidden" aria-label="Evolução do personagem">
+        <div class="panel-card skill-tree"><div class="eyebrow">SEU POTENCIAL</div><h2>CAMINHO <em>DO GUERREIRO</em></h2>
+        <p>Ajuste seus atributos livremente, sem pontos ou custos. Os valores afetam imediatamente o jogo e são salvos no seu personagem.</p>
+        <div id="attribute-editor" class="attribute-editor"></div>
+        <p class="skill-note">✦ Laboratório de evolução: clique em − ou + para testar combinações e volte ao mapa com K.</p>
+        <button id="skills-close" type="button" class="button button-primary">VOLTAR AO JOGO →</button></div>
+      </section>
+      <div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.1.6</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Escolha uma das quatro raças, explore a Planície Esmeralda e teste seu Kamehameha no Totem de Treinamento.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

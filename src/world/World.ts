@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import { WORLD_HALF } from '../data/gameConfig';
 
-type Obstacle = { x: number; z: number; radius: number };
+type Obstacle = { x: number; z: number; radius: number; active?: boolean };
+type Part = { mesh: THREE.InstancedMesh; index: number; transform: THREE.Matrix4 };
+type Breakable = { id: number; center: THREE.Vector3; radius: number; health: number; maxHealth: number; respawn: number; parts: Part[]; standalone?: THREE.Object3D; obstacle?: Obstacle };
+export type WorldHit = { point: THREE.Vector3; distance: number; objectId?: number; dummy?: boolean };
+export type DummyTarget = { hitCenter: THREE.Vector3; health: number };
+
 type MovingCloud = { group: THREE.Group; speed: number };
 
 function randomGenerator(seed: number): () => number {
@@ -20,6 +25,9 @@ export class World {
   private readonly clouds: MovingCloud[] = [];
   private readonly fireflies: THREE.Points;
   private elapsed = 0;
+  private readonly breakables: Breakable[] = [];
+  private nextBreakableId = 1;
+  readonly respawnSeconds = 120;
 
   constructor(scene: THREE.Scene) {
     scene.fog = new THREE.FogExp2(0xa9b8b7, 0.0058);
@@ -38,7 +46,7 @@ export class World {
     this.dummyPosition.y = this.height(this.dummyPosition.x, this.dummyPosition.z);
   }
 
-  height(x: number, z: number): number {
+  private rawHeight(x: number, z: number): number {
     const d = Math.hypot(x, z);
     const flatten = THREE.MathUtils.smoothstep(d, 17, 38);
     const broad = Math.sin(x * 0.054) * Math.cos(z * 0.051) * 2.5;
@@ -48,9 +56,27 @@ export class World {
     return (broad + ridges + detail + edge) * flatten;
   }
 
+  height(x: number, z: number): number {
+    const width = WORLD_HALF * 2 + 20;
+    const step = width / 150;
+    const ix = Math.max(0, Math.min(149, Math.floor((x + width / 2) / step)));
+    const iz = Math.max(0, Math.min(149, Math.floor((width / 2 - z) / step)));
+    const x0 = -width / 2 + ix * step;
+    const z0 = width / 2 - iz * step;
+    const u = THREE.MathUtils.clamp((x - x0) / step, 0, 1);
+    const v = THREE.MathUtils.clamp((z0 - z) / step, 0, 1);
+    const h00 = this.rawHeight(x0, z0);
+    const h10 = this.rawHeight(x0 + step, z0);
+    const h01 = this.rawHeight(x0, z0 - step);
+    const h11 = this.rawHeight(x0 + step, z0 - step);
+    return u + v <= 1
+      ? h00 + (h10 - h00) * u + (h01 - h00) * v
+      : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+  }
+
   isWalkable(x: number, z: number, radius = 0.48): boolean {
     if (Math.abs(x) > WORLD_HALF - 3 || Math.abs(z) > WORLD_HALF - 3) return false;
-    return !this.obstacles.some((obj) => Math.hypot(x - obj.x, z - obj.z) < obj.radius + radius);
+    return !this.obstacles.some((obj) => obj.active !== false && Math.hypot(x - obj.x, z - obj.z) < obj.radius + radius);
   }
 
   update(dt: number): void {
@@ -58,6 +84,15 @@ export class World {
     for (const cloud of this.clouds) {
       cloud.group.position.x += dt * cloud.speed;
       if (cloud.group.position.x > 260) cloud.group.position.x = -260;
+    }
+    for (const entry of this.breakables) {
+      if (entry.respawn <= 0) continue;
+      entry.respawn -= dt;
+      if (entry.respawn > 0) continue;
+      entry.health = entry.maxHealth;
+      if (entry.standalone) entry.standalone.visible = true;
+      if (entry.obstacle) entry.obstacle.active = true;
+      for (const part of entry.parts) { part.mesh.setMatrixAt(part.index, part.transform); part.mesh.instanceMatrix.needsUpdate = true; part.mesh.computeBoundingSphere(); }
     }
     this.fireflies.rotation.y = this.elapsed * 0.003;
     const material = this.fireflies.material as THREE.PointsMaterial;
@@ -134,7 +169,7 @@ export class World {
     for (let i = 0; i < position.count; i++) {
       const x = position.getX(i);
       const z = position.getZ(i);
-      const y = this.height(x, z);
+      const y = this.rawHeight(x, z);
       position.setY(i, y);
       const wave = Math.sin(x * 0.22) * Math.sin(z * 0.19) * 0.5 + 0.5;
       v.copy(grass).lerp(lightGrass, wave * 0.68 + 0.08);
@@ -179,7 +214,7 @@ export class World {
       if (rnd() < 0.22 && fromCenter < 44) continue;
       const s = 0.72 + rnd() * 0.73;
       placements.push({ x, z, s, variant: i % 4 });
-      this.obstacles.push({ x, z, radius: 0.75 * s });
+      this.obstacles.push({ x, z, radius: 0.75 * s, active: true });
     }
     const trunkGeo = new THREE.CylinderGeometry(0.38, 0.62, 4.5, 7);
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x766247, roughness: 1, flatShading: true });
@@ -197,14 +232,18 @@ export class World {
       dummy.scale.setScalar(p.s);
       dummy.updateMatrix();
       trunkInstances.setMatrixAt(i, dummy.matrix);
+      const parts: Part[] = [{ mesh: trunkInstances, index: i, transform: dummy.matrix.clone() }];
       const c = p.variant % 3;
       for (let j = 0; j < 2; j++) {
         dummy.position.set(p.x + (j ? 1.1 : -0.7) * p.s, ground + (5.6 + j * 1.25) * p.s, p.z + (j ? 0.3 : -0.7) * p.s);
         dummy.scale.setScalar(p.s * (j ? 0.76 : 1));
         dummy.rotation.set(0.1, rnd() * 5, 0);
         dummy.updateMatrix();
-        canopies[c].setMatrixAt(counts[c]++, dummy.matrix);
+        const slot = counts[c]++;
+        canopies[c].setMatrixAt(slot, dummy.matrix);
+        parts.push({ mesh: canopies[c], index: slot, transform: dummy.matrix.clone() });
       }
+      this.breakables.push({ id: this.nextBreakableId++, center: new THREE.Vector3(p.x, ground + 4.1 * p.s, p.z), radius: 3.25 * p.s, health: 65, maxHealth: 65, respawn: 0, parts, obstacle: this.obstacles[this.obstacles.length - placements.length + i] });
     }
     trunkInstances.castShadow = true;
     trunkInstances.receiveShadow = true;
@@ -234,7 +273,9 @@ export class World {
       obj.scale.set(radius * 1.2, radius * (0.5 + rnd() * 0.7), radius * 0.9);
       obj.updateMatrix();
       rocks.setMatrixAt(i, obj.matrix);
-      if (radius > 1.6) this.obstacles.push({ x, z, radius: radius * 0.75 });
+      const obstacle = radius > 1.6 ? { x, z, radius: radius * 0.75, active: true } : undefined;
+      if (obstacle) this.obstacles.push(obstacle);
+      this.breakables.push({ id: this.nextBreakableId++, center: obj.position.clone(), radius: radius * 1.1, health: 85, maxHealth: 85, respawn: 0, parts: [{ mesh: rocks, index: i, transform: obj.matrix.clone() }], obstacle });
     }
     rocks.castShadow = true;
     rocks.receiveShadow = true;
@@ -301,8 +342,78 @@ export class World {
       pillar.rotation.z = Math.sin(x) * 0.13;
       pillar.castShadow = true;
       this.group.add(pillar);
+      this.breakables.push({ id: this.nextBreakableId++, center: pillar.position.clone(), radius: 1.6, health: 75, maxHealth: 75, respawn: 0, parts: [], standalone: pillar });
     }
   }
+
+  private raySphere(origin: THREE.Vector3, dir: THREE.Vector3, center: THREE.Vector3, radius: number): number | null {
+    const delta = center.clone().sub(origin);
+    const projection = delta.dot(dir);
+    const discriminant = radius * radius - (delta.lengthSq() - projection * projection);
+    if (discriminant < 0) return null;
+    const near = projection - Math.sqrt(discriminant);
+    const far = projection + Math.sqrt(discriminant);
+    return near >= 0 ? near : far >= 0 ? far : null;
+  }
+
+  trace(origin: THREE.Vector3, direction: THREE.Vector3, distance: number, dummy?: DummyTarget): WorldHit {
+    const dir = direction.clone().normalize();
+    let nearest = distance;
+    let result: WorldHit = { point: origin.clone().addScaledVector(dir, distance), distance };
+    for (const entry of this.breakables) {
+      if (entry.health <= 0) continue;
+      const t = this.raySphere(origin, dir, entry.center, entry.radius);
+      if (t !== null && t < nearest) {
+        nearest = t;
+        result = { point: origin.clone().addScaledVector(dir, t), distance: t, objectId: entry.id };
+      }
+    }
+    if (dummy && dummy.health > 0) {
+      const t = this.raySphere(origin, dir, dummy.hitCenter, 1.3);
+      if (t !== null && t < nearest) {
+        nearest = t;
+        result = { point: origin.clone().addScaledVector(dir, t), distance: t, dummy: true };
+      }
+    }
+    if (dir.y < -0.02) {
+      let previous = 0;
+      for (let t = 1.8; t <= nearest; t += 1.8) {
+        const x = origin.x + dir.x * t;
+        const z = origin.z + dir.z * t;
+        if (origin.y + dir.y * t <= this.height(x, z)) {
+          let low = previous;
+          let high = t;
+          for (let j = 0; j < 7; j++) {
+            const mid = (low + high) / 2;
+            const mx = origin.x + dir.x * mid;
+            const mz = origin.z + dir.z * mid;
+            if (origin.y + dir.y * mid <= this.height(mx, mz)) high = mid;
+            else low = mid;
+          }
+          if (high < nearest) result = { point: origin.clone().addScaledVector(dir, high), distance: high };
+          break;
+        }
+        previous = t;
+      }
+    }
+    return result;
+  }
+
+  damage(id: number, amount: number): { actual: number; dead: boolean } {
+    const entry = this.breakables.find((item) => item.id === id);
+    if (!entry || entry.health <= 0) return { actual: 0, dead: false };
+    const actual = Math.min(entry.health, Math.max(0, amount));
+    entry.health -= actual;
+    if (entry.health > 0) return { actual, dead: false };
+    entry.respawn = this.respawnSeconds;
+    if (entry.standalone) entry.standalone.visible = false;
+    if (entry.obstacle) entry.obstacle.active = false;
+    const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const part of entry.parts) { part.mesh.setMatrixAt(part.index, hidden); part.mesh.instanceMatrix.needsUpdate = true; part.mesh.computeBoundingSphere(); }
+    return { actual, dead: true };
+  }
+
+  get breakableCount(): number { return this.breakables.length; }
 
   private addFireflies(): THREE.Points {
     const rand = randomGenerator(33001);

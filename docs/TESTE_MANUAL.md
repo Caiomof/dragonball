@@ -1,19 +1,17 @@
-# Checklist manual · DragonBallRPG v0.1
+# Roteiro de teste manual — v0.1.6
 
-- [ ] Execute `JOGAR.bat` e confirme abertura do navegador.
-- [ ] Menu principal estilizado e botão COMEÇAR JORNADA funcionam.
-- [ ] Selecione o Namekuseijin e confirme aparência verde com antenas no mundo.
-- [ ] HUD mostra raça Namekuseijin, poder 8, vida 140, Ki 90.
-- [ ] WASD anda; segurar Shift aumenta velocidade; soltar volta a andar.
-- [ ] Espaço provoca um salto com gravidade.
-- [ ] Clique esquerdo dispara feixe azul com carregamento; Ki diminui 25.
-- [ ] Cliques consecutivos durante 2 segundos não disparam outro ataque.
-- [ ] Acerte o totem e observe a barra de vida e o feedback de dano.
-- [ ] Quatro impactos deixam totem com 0 HP (quando houver Ki suficiente).
-- [ ] O totem reaparece após 8 segundos.
-- [ ] Esc pausa; CONTINUAR JOGANDO retoma; VOLTAR AO MENU reinicia fluxo.
-- [ ] Atualize a página: menu e ambiente continuam renderizando.
-- [ ] Pressione F3 e veja o estado atual de gameplay para facilitar diagnóstico.
-- [ ] Execute `npm run build`, depois `npm run preview`; confirme abertura do build.
+1. Executar `JOGAR.bat`. Confirmar abertura do endereço local e ausência de erro na tela; se houver, inspecionar console do navegador (`F12`).
+2. **Começar jornada** → **Criar novo guerreiro**. Escolher raça, nome, altura, porte físico, olhos/cabelo/barba. Inspecionar a prévia 3D em diferentes estilos.
+3. **Salvar e jogar**. Verificar se o avatar correto surge, se os pés ficam no chão e se é possível andar **para cima e para baixo** em colinas.
+4. Andar normalmente por 10 segundos. Correr segurando Shift por 10 segundos. As animações devem manter um ritmo proporcional a *andar x correr*, sem acelerar freneticamente se o atributo de velocidade aumentar.
+5. Com a mira em um alvo próximo, clicar com o esquerdo três vezes em intervalos menores que 0,85s. Conferir combos, gasto de stamina e dano.
+6. Usar clique direito: bola de Ki e gasto de 6 Ki.
+7. Pressionar e soltar `1` rapidamente: Kamehameha básico. Depois manter `1` pressionado por 2 segundos: feixe maior, mais dano, mais gasto de Ki.
+8. Conferir as técnicas `2`, `3`, `4` da mesma forma. Scroll continua destacando o poder na hotbar.
+9. Pressionar `K` para evoluir Ki, regeneração de Ki, stamina, vida, poder, velocidade terrestre e voo via botões **+ e −**. Voltar ao mapa e testar efeito imediatamente.
+10. Dar dois toques em Espaço para voar. Testar subida com Espaço, descida com Ctrl e modificação do atributo de voo.
+11. Pressionar `V` para câmera em primeira pessoa; inspecionar movimentos dos braços durante socos e ataques.
+12. Voltar ao menu, criar um segundo personagem, editar um antigo e conferir sua evolução. Recarregar a página e confirmar que os perfis continuam salvos.
+13. Destruir um objeto ambiental. Conferir que renasce após dois minutos.
 
-Se uma etapa falhar, envie a descrição e o conteúdo do console do navegador (F12) para depuração. Este checklist não substitui testes automatizados de DOM/WebGL em um navegador real.
+**Limite conhecido:** a v0.1.6 foi validada estruturalmente e pela importação do GLB, mas a execução WebGL no Chrome/Edge não pôde ser automatizada no ambiente gerador por falta de acesso às dependências npm. Este roteiro confirma as interações visuais.

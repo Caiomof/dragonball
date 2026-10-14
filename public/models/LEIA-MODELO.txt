@@ -1,0 +1,11 @@
+Dragon Ball RPG: Origens v0.1.6
+
+O boneco rigado e animado vem incluido no pacote:
+  origens-warrior.glb
+
+IMPORTANTE:
+- Nao depende de downloads da internet.
+- Animacoes existentes: Idle, Walk, Run, Jump, Flight, Punch, Charge.
+- O arquivo foi gerado para o projeto e nao requer Blender.
+- scripts/build_hero.py e um recurso opcional para desenvolvimento.
+- Nao mova, apague ou renomeie origens-warrior.glb.

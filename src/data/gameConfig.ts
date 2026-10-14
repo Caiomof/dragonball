@@ -2,7 +2,7 @@ import raceData from './races.json';
 import abilityData from './abilities.json';
 
 export type RaceId = 'saiyajin' | 'terraqueo' | 'namekuseijin' | 'majin';
-export type GameState = 'MAIN_MENU' | 'RACE_SELECTION' | 'LOADING' | 'PLAYING' | 'PAUSED';
+export type GameState = 'MAIN_MENU' | 'CHARACTER_SELECT' | 'RACE_SELECTION' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'SETTINGS' | 'SKILLS';
 export type Race = {
   id: RaceId;
   name: string;
@@ -36,6 +36,11 @@ export type FighterStats = {
   ki: number;
   maxKi: number;
   power: number;
+  stamina: number;
+  maxStamina: number;
+  kiRegen: number;
+  speed: number;
+  flight: number;
 };
 
 export function createStats(race: Race): FighterStats {
@@ -45,7 +50,12 @@ export function createStats(race: Race): FighterStats {
     maxHealth: race.health,
     ki: race.ki,
     maxKi: race.ki,
-    power: race.power
+    power: race.power,
+    stamina: 100,
+    maxStamina: 100,
+    kiRegen: 6.2,
+    speed: 1,
+    flight: 1
   };
 }
 

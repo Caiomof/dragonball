@@ -71,6 +71,14 @@ if not exist "node_modules\.package-lock.json" (
     echo [OK] Dependencias presentes.
 )
 
+if not exist "public\models\origens-warrior.glb" (
+    echo [ERRO] Modelo 3D animado interno ausente.
+    echo Extraia todo o ZIP, incluindo a pasta public\models.
+    pause
+    exit /b 1
+)
+echo [OK] Modelo animado local presente - sem downloads externos.
+
 echo.
 echo [INFO] Iniciando o jogo...
 start "DragonBallRPG - Servidor" cmd /k "cd /d ""%~dp0"" && npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort"

@@ -1,7 +1,7 @@
 {
   "name": "dragonball-rpg-origens",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.6",
   "type": "module",
   "description": "Protótipo 3D estilizado de aventura e combate para navegador",
   "scripts": {
