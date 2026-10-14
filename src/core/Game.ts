@@ -37,6 +37,7 @@ export class Game {
   private pitch = -0.035;
   private grounded = true;
   private flying = false;
+  private flyingSince = 0;
   private lastSpaceAt = -1000;
   private elapsed = 0;
   private lastFrame = performance.now();
@@ -70,6 +71,7 @@ export class Game {
   private readonly fpEnergy = new THREE.Group();
   private readonly fpEnergyLight = new THREE.PointLight(0x61d0ff, 0, 3);
   private readonly fpEnergyMaterial = new THREE.MeshBasicMaterial({ color: 0x9bedff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  private heroReady = false;
   private readonly fpSkinMaterial = new THREE.MeshToonMaterial({ color: 0xe6b18a });
   private readonly fpSleeveMaterial = new THREE.MeshToonMaterial({ color: 0x235caa });
 
@@ -146,10 +148,11 @@ export class Game {
   private changeState(state: GameState): void {
     this.state = state;
     this.ui.state(state);
-    if (state !== 'PLAYING') this.keys.clear();
+    if (state !== 'PLAYING' && state !== 'PAUSED') this.keys.clear();
     if (state === 'RACE_SELECTION') this.selectRace(this.ui.selected);
-    this.character.root.visible = state !== 'PLAYING' || this.viewMode === 'third';
-    this.firstPersonArms.visible = state === 'PLAYING' && this.viewMode === 'first';
+    this.character.root.visible = state !== 'PLAYING' || this.viewMode === 'third' || this.heroReady;
+    this.character.setFirstPerson(state === 'PLAYING' && this.viewMode === 'first' && this.heroReady);
+    this.firstPersonArms.visible = state === 'PLAYING' && this.viewMode === 'first' && !this.heroReady;
   }
 
   private selectRace(race: RaceId): void {
@@ -157,7 +160,10 @@ export class Game {
     this.scene.remove(this.character.root);
     this.character.dispose();
     this.character = new Character(getRace(race));
-    this.character.onModelStatus(ok => { if(!ok) this.ui.toast('ERRO AO CARREGAR O MODELO 3D. VERIFIQUE A PASTA public/models.', 'danger', 8); });
+    this.character.onModelStatus(ok => {
+      this.heroReady = ok;
+      if (!ok) this.ui.toast('ERRO AO CARREGAR O MODELO 3D. VERIFIQUE A PASTA public/models.', 'danger', 8);
+    });
     const skins: Record<RaceId, number> = { saiyajin: 0xe6b18a, terraqueo: 0xbd8061, namekuseijin: 0x74bb63, majin: 0xef9dc0 };
     const sleeves: Record<RaceId, number> = { saiyajin: 0x235caa, terraqueo: 0x269d92, namekuseijin: 0x8c6bb2, majin: 0x42445c };
     this.fpSkinMaterial.color.setHex(skins[race]);
@@ -189,6 +195,7 @@ export class Game {
     this.verticalVelocity = 0;
     this.grounded = true;
     this.flying = false;
+    this.flyingSince = 0;
     this.cooldownUntil.clear();
     this.activeSkill = 'kamehameha';
     this.heldSkill = null;
@@ -334,6 +341,7 @@ export class Game {
 
   private installInputs(): void {
     window.addEventListener('keydown', event => {
+      if (['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'].includes(event.code)) this.keys.add(event.code);
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) && this.state === 'PLAYING') event.preventDefault();
       if (event.code === 'F3') {
         event.preventDefault();
@@ -365,6 +373,7 @@ export class Game {
         const now = performance.now();
         if (now - this.lastSpaceAt <= 320) {
           this.flying = !this.flying;
+          if (this.flying) this.flyingSince = this.elapsed;
           this.grounded = false;
           this.verticalVelocity = this.flying ? 3.6 : Math.min(this.verticalVelocity, 0);
           this.ui.toast(this.flying ? '✦ VOO DESPERTADO' : 'RETORNANDO AO SOLO', 'success');
@@ -438,7 +447,7 @@ export class Game {
     if(this.stats.ki<spec.kiCost){this.ui.toast('KI INSUFICIENTE','danger',1);return;}
     this.heldSkill=id;
     this.heldSince=this.elapsed;
-    this.character.gesture('charge');
+    this.character.gesture(Character.castAnimationForSkill(id));
     this.character.setAuraColor(spec.colorHex,spec.coreHex);
     this.fpEnergyMaterial.color.setHex(spec.coreHex);
     this.fpEnergyLight.color.setHex(spec.colorHex);
@@ -460,6 +469,7 @@ export class Game {
     const kiCost=spec.kiCost+Math.ceil(held*10);
     if(!spendKi(this.stats,kiCost)) {this.ui.toast(`PRECISA DE ${kiCost} KI PARA ESTE CARREGAMENTO`,'danger');this.sound.play('deny');return;}
     this.cooldownUntil.set(id,this.elapsed+spec.cooldown);
+    this.character.gesture(Character.castAnimationForSkill(id));
     this.attackEnd=this.elapsed+.36+spec.duration;
     const damage=Math.round(spec.damage*(1+level*2.2)*this.powerMultiplier());
     this.castAttack(spec.id, spec.colorHex, spec.coreHex, spec.range, .07, spec.duration, damage, 1+level*1.8);
@@ -503,13 +513,16 @@ export class Game {
     this.lastMelee=this.elapsed;
     this.lastMeleeCombo=this.elapsed;
     this.character.root.rotation.y=this.yaw;
-    this.attackEnd=this.elapsed+.22;
-    this.character.gesture('punch');
+    this.attackEnd = this.elapsed + (this.comboStep === 2 ? 0.72 : 0.5);
+    this.character.gesture(this.comboStep===2?'punchcross':'punch');
+    this.character.setAuraColor(0xff4a3a, 0xffd0c4);
     this.sound.play('impact');
     const origin=this.character.root.position.clone().add(new THREE.Vector3(0,1.3,0));
     const dir=this.forward();
     // Detect a melee target from the fighter (not from the distant third-person camera).
     const hit=this.world.trace(origin,dir,3.05,this.dummy);
+    const fist = origin.clone().addScaledVector(dir, 1.15);
+    this.combat.burst(fist, 0xff5a45);
     if(hit.point.distanceTo(origin)>3.06)return;
     const amount=Math.round((7+this.comboStep*3)*this.powerMultiplier());
     this.applyHit(hit,hit.point,amount,hit.point);
@@ -573,7 +586,7 @@ export class Game {
     this.frameCounter++;
     if (this.frameCounter % 30 === 0 && dt > 0) this.fps = Math.round(1 / dt);
     this.ui.update();
-    if (this.debug) this.debugOverlay.textContent = `DEBUG v0.1.6 · FPS ${this.fps}\nEstado: ${this.state}\nRaça: ${this.raceId}\nPosição: ${this.character.root.position.toArray().map(v => v.toFixed(1)).join(', ')}\nVisão: ${this.viewMode} FOV ${this.fov}\nVoando: ${this.flying}\nNo chão: ${this.grounded}\nKi: ${Math.round(this.stats.ki)}\nPoder: ${this.stats.power}\nHabilidade: ${this.activeSkill}\nStamina: ${this.stats.stamina.toFixed(0)}\nObjetos destrutíveis: ${this.world.breakableCount}`;
+    if (this.debug) this.debugOverlay.textContent = `DEBUG v0.1.7 · FPS ${this.fps}\nEstado: ${this.state}\nRaça: ${this.raceId}\nPosição: ${this.character.root.position.toArray().map(v => v.toFixed(1)).join(', ')}\nVisão: ${this.viewMode} FOV ${this.fov}\nVoando: ${this.flying}\nNo chão: ${this.grounded}\nKi: ${Math.round(this.stats.ki)}\nPoder: ${this.stats.power}\nHabilidade: ${this.activeSkill}\nStamina: ${this.stats.stamina.toFixed(0)}\nObjetos destrutíveis: ${this.world.breakableCount}`;
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.tick);
   };
@@ -581,8 +594,8 @@ export class Game {
   private updatePlayer(dt: number): void {
     const inputX = Number(this.keys.has('KeyD') || this.keys.has('ArrowRight')) - Number(this.keys.has('KeyA') || this.keys.has('ArrowLeft'));
     const inputZ = Number(this.keys.has('KeyW') || this.keys.has('ArrowUp')) - Number(this.keys.has('KeyS') || this.keys.has('ArrowDown'));
-    const tryingSprint=this.keys.has('ShiftLeft')||this.keys.has('ShiftRight');
-    const sprint=tryingSprint&&this.stats.stamina>1;
+    const tryingSprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    const sprint = tryingSprint && this.stats.stamina > 0.05;
     const speed=this.flying?(sprint?20:12)*this.stats.flight:(sprint?RUN_SPEED:WALK_SPEED)*this.stats.speed;
     const desired = new THREE.Vector3(Math.cos(this.yaw) * inputX - Math.sin(this.yaw) * inputZ, 0, -Math.sin(this.yaw) * inputX - Math.cos(this.yaw) * inputZ);
     if (desired.lengthSq() > 0.001) desired.normalize().multiplyScalar(speed);
@@ -628,26 +641,33 @@ export class Game {
       }
     }
     const move = this.horizontalVelocity.length();
-    if (move > 0.25 && this.elapsed >= this.attackEnd) {
+    if (this.viewMode === 'first' && this.heroReady) this.character.root.rotation.y = this.yaw;
+    else if (move > 0.25 && this.elapsed >= this.attackEnd) {
       const angle = Math.atan2(-this.horizontalVelocity.x, -this.horizontalVelocity.z);
       this.character.root.rotation.y = smoothAngle(this.character.root.rotation.y, angle, Math.min(1, dt * 13));
     }
-    this.character.animate(dt, move, !this.grounded, this.elapsed < this.attackEnd, this.flying, sprint);
+    const flightPhase = !this.flying ? 'ground' : this.elapsed - this.flyingSince < 0.65 ? 'takeoff' : this.elapsed - this.flyingSince > 2.4 ? 'cruise' : 'hover';
+    this.character.animate(dt, move, !this.grounded, this.elapsed < this.attackEnd, this.flying, sprint, flightPhase, this.heldSkill ?? this.activeSkill);
   }
 
   private updateCamera(dt: number): void {
     const origin = this.character.root.position;
     const forward = this.forward();
     const head = origin.clone().add(new THREE.Vector3(0, this.flying ? 1.9 : 1.75, 0));
+    const eye = new THREE.Vector3();
+    const eyesReady = this.viewMode === 'first' && this.heroReady && this.character.copyEye(eye);
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const desired = this.viewMode === 'first'
+    const desired = eyesReady
+      ? eye.addScaledVector(forward, 0.12)
+      : this.viewMode === 'first'
       ? head.clone().addScaledVector(forward, 0.19)
       : head.clone().addScaledVector(forward, -5.8).addScaledVector(right, 0.85).add(new THREE.Vector3(0, 0.55, 0));
     if (this.viewMode === 'third') desired.y = Math.max(this.world.height(desired.x, desired.z) + 1.25, desired.y);
-    this.camera.position.lerp(desired, 1 - Math.exp(-dt * 16));
+    this.camera.position.lerp(desired, 1 - Math.exp(-dt * (eyesReady ? 22 : 16)));
     this.camera.lookAt(this.camera.position.clone().addScaledVector(forward, 25));
-    this.character.root.visible = this.viewMode === 'third';
-    this.firstPersonArms.visible = this.viewMode === 'first' && this.state === 'PLAYING';
+    this.character.setFirstPerson(this.viewMode === 'first' && this.heroReady);
+    this.character.root.visible = this.viewMode === 'third' || this.heroReady;
+    this.firstPersonArms.visible = this.viewMode === 'first' && this.state === 'PLAYING' && !this.heroReady;
   }
 
   private buildFirstPersonHands(): void {
@@ -716,6 +736,6 @@ export class Game {
   }
 
   private debugState(): object {
-    return { state: this.state, hero: this.activeProfile?.name, charging: this.heldSkill, race: this.raceId, stats: { ...this.stats }, position: this.character.root.position.toArray(), speed: this.horizontalVelocity.length(), ground: this.grounded, flying: this.flying, mode: this.viewMode, activeSkill: this.activeSkill, dummyHealth: this.dummy.health, beams: this.combat.activeCount, breakables: this.world.breakableCount };
+    return { state: this.state, heroReady: this.heroReady, hero: this.activeProfile?.name, charging: this.heldSkill, race: this.raceId, stats: { ...this.stats }, position: this.character.root.position.toArray(), speed: this.horizontalVelocity.length(), ground: this.grounded, flying: this.flying, mode: this.viewMode, activeSkill: this.activeSkill, dummyHealth: this.dummy.health, beams: this.combat.activeCount, breakables: this.world.breakableCount };
   }
 }

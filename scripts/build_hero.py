@@ -130,21 +130,26 @@ def make_clip(name,duration,cycles=1.0,kind='idle'):
         clip['channels'].append({'sampler':k,'target':{'node':name2id[bone],'path':'rotation'}})
     wave=lambda t,phase=0:math.sin(t*math.tau*cycles+phase)
     walk=kind in ('walk','run')
-    amp={'idle':0.04,'walk':0.42,'run':0.71,'jump':0.05,'flight':0.02,'punch':0.04,'charge':0.04}.get(kind,0.05)
+    amp={'idle':0.04,'walk':0.42,'run':0.71,'jump':0.05,'flight':0.02,'flight_takeoff':0.12,'flight_cruise':0.03,'punch':0.04,'charge':0.04,'disc':0.05,'beam':0.04}.get(kind,0.05)
     for s,side in ((-1,'Left'),(1,'Right')):
-        channel(side+'UpLeg',lambda t,s=s: (s*amp*wave(t))+(-.17 if kind=='flight' else 0))
-        channel(side+'Leg',lambda t,s=s: (max(0,s*wave(t))*0.28 if walk else (-0.24 if kind=='flight' else 0.025*wave(t))),axis=(1,0,0))
+        channel(side+'UpLeg',lambda t,s=s: (s*amp*wave(t))+(-.17 if kind in ('flight','flight_cruise') else -.28 if kind=='flight_takeoff' else 0))
+        channel(side+'Leg',lambda t,s=s: (max(0,s*wave(t))*0.28 if walk else (-0.24 if kind in ('flight','flight_cruise') else -.42 if kind=='flight_takeoff' else 0.025*wave(t))),axis=(1,0,0))
         channel(side+'Arm', lambda t,s=s: (
             (-1.15*min(1,max(0,(t-.1)*9))+.56*min(1,max(0,(t-.68)*5))) if kind=='punch' and s==1 else
             (-.55*min(1,t*9)) if kind=='punch' else
-            (-1.08*min(1,t*7)) if kind=='charge' else
-            (-s*amp*.8*wave(t)) + (-.30 if kind=='flight' else -.05 if kind=='idle' else 0)
+            (-1.08*min(1,t*7)) if kind in ('charge','beam') else
+            (-.95*min(1,t*8)) if kind=='disc' else
+            (-s*amp*.8*wave(t)) + (-.30 if kind in ('flight','flight_cruise') else -.75 if kind=='flight_takeoff' else -.05 if kind=='idle' else 0)
         ),axis=(1,0,0))
         channel(side+'ForeArm',lambda t,s=s: (-0.26 if kind=='run' else -0.13 if kind=='walk' else -0.14),axis=(1,0,0))
-    channel('Spine',lambda t:(-.18 if kind=='flight' else .045*wave(t,0.3) if walk else .025*wave(t)))
+    channel('Spine',lambda t:(-.18 if kind in ('flight','flight_cruise') else -.35 if kind=='flight_takeoff' else .045*wave(t,0.3) if walk else .025*wave(t)))
     channel('Head',lambda t:0.02*wave(t),axis=(0,0,1))
     animations.append(clip)
-for args in [('Idle',2,1,'idle'),('Walk',0.85,1,'walk'),('Run',0.63,1,'run'),('Jump',0.8,1,'jump'),('Flight',1.5,1,'flight'),('Punch',0.55,1,'punch'),('Charge',0.8,1,'charge')]:make_clip(*args)
+for args in [
+    ('Idle',2,1,'idle'),('Walk',0.85,1,'walk'),('Run',0.63,1,'run'),('Jump',0.8,1,'jump'),
+    ('Flight',1.5,1,'flight'),('FlightTakeoff',0.58,1,'flight_takeoff'),('FlightCruise',1.35,1.2,'flight_cruise'),
+    ('Punch',0.55,1,'punch'),('Charge',0.8,1,'charge'),('Beam',0.9,1,'beam'),('Disc',0.62,1,'disc')
+]:make_clip(*args)
 
 scene={'asset':{'version':'2.0','generator':'DragonBallRPG Origens v0.1.6 original rig builder'},'scene':0,'scenes':[{'nodes':[root]}], 'nodes':nodes,'meshes':meshes,'materials':materials, 'animations':animations,'buffers':[{'byteLength':len(binary)}],'bufferViews':views,'accessors':accessors}
 j=json.dumps(scene,separators=(',',':')).encode('utf8')

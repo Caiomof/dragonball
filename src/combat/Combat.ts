@@ -108,7 +108,7 @@ type ActiveEffect = {
   core: THREE.Mesh;
   aura: THREE.Mesh;
   rings: THREE.Mesh[];
-  particles: THREE.Mesh[];
+  particles: THREE.Sprite[];
   origin: THREE.Vector3;
   destination: THREE.Vector3;
   direction: THREE.Vector3;
@@ -118,12 +118,46 @@ type ActiveEffect = {
   onImpact: (position: THREE.Vector3) => void;
 };
 
+function softGlowTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.Texture();
+  const glow = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  glow.addColorStop(0, 'rgba(255,255,255,1)');
+  glow.addColorStop(0.22, 'rgba(255,255,255,0.72)');
+  glow.addColorStop(0.55, 'rgba(255,255,255,0.22)');
+  glow.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 128, 128);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 export class CombatEffects {
   private readonly scene: THREE.Scene;
   private readonly effects: ActiveEffect[] = [];
-  private readonly sparks: { mesh: THREE.Mesh; velocity: THREE.Vector3; life: number }[] = [];
+  private readonly sparks: { mesh: THREE.Sprite; velocity: THREE.Vector3; life: number; max: number }[] = [];
+  private readonly glow = softGlowTexture();
 
   constructor(scene: THREE.Scene) { this.scene = scene; }
+
+  private mote(color: number, size: number, opacity: number): THREE.Sprite {
+    const material = new THREE.SpriteMaterial({
+      map: this.glow,
+      color,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.setScalar(size);
+    return sprite;
+  }
 
   cast(origin: THREE.Vector3, destination: THREE.Vector3, style: AttackVisual, onImpact: (position: THREE.Vector3) => void): void {
     const direction = destination.clone().sub(origin).normalize();
@@ -148,10 +182,9 @@ export class CombatEffects {
       ring.rotation.x = Math.PI / 2;
       body.add(ring); rings.push(ring);
     }
-    const particles: THREE.Mesh[] = [];
-    const particleGeo = new THREE.TetrahedronGeometry(0.075);
-    for (let i = 0; i < 30; i++) {
-      const p = new THREE.Mesh(particleGeo, i % 4 === 0 ? coreMaterial : auraMaterial);
+    const particles: THREE.Sprite[] = [];
+    for (let i = 0; i < 36; i++) {
+      const p = this.mote(i % 4 === 0 ? style.core : style.color, 0.22 + (i % 5) * 0.04, 0.72);
       root.add(p);
       particles.push(p);
     }
@@ -226,18 +259,30 @@ export class CombatEffects {
       spark.life -= dt;
       spark.mesh.position.addScaledVector(spark.velocity, dt);
       spark.velocity.y -= 7 * dt;
-      spark.mesh.scale.setScalar(Math.max(0.01, spark.life * 1.4));
-      if (spark.life <= 0) { this.scene.remove(spark.mesh); spark.mesh.geometry.dispose(); this.sparks.splice(i, 1); }
+      const fade = Math.max(0, spark.life / spark.max);
+      spark.mesh.scale.setScalar(0.15 + fade * (spark.velocity.lengthSq() < 0.01 ? 2.6 : 0.7));
+      (spark.mesh.material as THREE.SpriteMaterial).opacity = fade;
+      if (spark.life <= 0) {
+        this.scene.remove(spark.mesh);
+        spark.mesh.material.dispose();
+        this.sparks.splice(i, 1);
+      }
     }
   }
 
+  burst(point: THREE.Vector3, color: number): void { this.impact(point, color); }
+
   private impact(point: THREE.Vector3, color: number): void {
-    const material = new THREE.MeshBasicMaterial({ color, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9 });
-    for (let i = 0; i < 36; i++) {
-      const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09 + Math.random() * 0.1, 0), material);
+    const flash = this.mote(color, 2.4, 0.85);
+    flash.position.copy(point);
+    this.scene.add(flash);
+    this.sparks.push({ mesh: flash, velocity: new THREE.Vector3(), life: 0.28, max: 0.28 });
+    for (let i = 0; i < 28; i++) {
+      const mesh = this.mote(i % 3 === 0 ? 0xfff4d2 : color, 0.28 + Math.random() * 0.45, 0.9);
       mesh.position.copy(point);
       this.scene.add(mesh);
-      this.sparks.push({ mesh, velocity: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.3) * 17, (Math.random() - 0.5) * 18), life: 0.5 + Math.random() * 0.35 });
+      const life = 0.45 + Math.random() * 0.4;
+      this.sparks.push({ mesh, velocity: new THREE.Vector3((Math.random() - 0.5) * 11, (Math.random() - 0.15) * 9, (Math.random() - 0.5) * 11), life, max: life });
     }
   }
 

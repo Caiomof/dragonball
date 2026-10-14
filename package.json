@@ -1,7 +1,7 @@
 {
   "name": "dragonball-rpg-origens",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "description": "Protótipo 3D estilizado de aventura e combate para navegador",
   "scripts": {
@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "test": "node --test tests/*.test.mjs",
-    "check": "npm run test && npm run build"
+    "check": "npm run test && npm run build",
+    "build:hero": "python scripts/build_hero.py"
   },
   "dependencies": {
     "three": "^0.180.0"

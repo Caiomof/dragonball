@@ -1,11 +1,12 @@
-Dragon Ball RPG: Origens v0.1.6
+Dragon Ball RPG: Origens v0.1.7
 
-O boneco rigado e animado vem incluido no pacote:
-  origens-warrior.glb
+O guerreiro texturizado e as animacoes CC0 (Quaternius) ficam em:
+  hero/Superhero_Male_FullBody.gltf
+  anims/ual1.glb
 
 IMPORTANTE:
 - Nao depende de downloads da internet.
-- Animacoes existentes: Idle, Walk, Run, Jump, Flight, Punch, Charge.
+- Animacoes: Idle, Walk, Run, Jump, Flight, FlightTakeoff, FlightCruise, Punch, Charge, Beam, Disc.
 - O arquivo foi gerado para o projeto e nao requer Blender.
 - scripts/build_hero.py e um recurso opcional para desenvolvimento.
 - Nao mova, apague ou renomeie origens-warrior.glb.

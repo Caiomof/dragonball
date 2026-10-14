@@ -71,9 +71,15 @@ if not exist "node_modules\.package-lock.json" (
     echo [OK] Dependencias presentes.
 )
 
-if not exist "public\models\origens-warrior.glb" (
-    echo [ERRO] Modelo 3D animado interno ausente.
-    echo Extraia todo o ZIP, incluindo a pasta public\models.
+if not exist "public\models\hero\Superhero_Male_FullBody.gltf" (
+    echo [ERRO] Modelo 3D do guerreiro ausente.
+    echo Confira a pasta public\models\hero.
+    pause
+    exit /b 1
+)
+if not exist "public\models\anims\ual1.glb" (
+    echo [ERRO] Animacoes do guerreiro ausentes.
+    echo Confira a pasta public\models\anims.
     pause
     exit /b 1
 )

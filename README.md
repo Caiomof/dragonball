@@ -1,4 +1,4 @@
-# DRAGON BALL RPG: ORIGENS — v0.1.6
+# DRAGON BALL RPG: ORIGENS — v0.1.7
 
 **Protótipo 3D experimental para Windows 10/11**, feito em TypeScript + Three.js + Vite. O jogo funciona em um servidor local e utiliza WebGL no navegador.
 

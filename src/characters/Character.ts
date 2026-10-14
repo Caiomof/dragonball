@@ -3,6 +3,25 @@ import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three';
 import type { Race, RaceId } from '../data/gameConfig';
 import { DEFAULT_APPEARANCE, type Appearance } from '../data/profiles';
+import type { SkillId } from '../data/skills';
+
+type GestureKind = 'punch' | 'punchcross' | 'charge' | 'beam' | 'disc';
+
+const CLIP_ALIASES: Record<string, string[]> = {
+  idle: ['idle_loop', 'idle'],
+  walk: ['walk_loop', 'walk'],
+  run: ['sprint_loop', 'jog_fwd_loop', 'run'],
+  jump: ['jump_loop', 'jump_start', 'jump'],
+  flight: ['jump_loop', 'idle_loop', 'flight'],
+  flighttakeoff: ['jump_start', 'flighttakeoff'],
+  flightcruise: ['jog_fwd_loop', 'sprint_loop', 'flightcruise'],
+  punch: ['punch_jab', 'punch'],
+  punchcross: ['punch_cross', 'punch_jab', 'punch'],
+  charge: ['spell_simple_idle_loop', 'charge'],
+  beam: ['spell_simple_shoot', 'spell_simple_idle_loop', 'beam'],
+  disc: ['sword_attack', 'spell_simple_shoot', 'disc']
+};
+type FlightPhase = 'ground' | 'takeoff' | 'hover' | 'cruise';
 
 const toon = (color: THREE.ColorRepresentation, emissive: THREE.ColorRepresentation = 0x000000) => new THREE.MeshToonMaterial({ color, emissive, emissiveIntensity: 0.2 });
 
@@ -50,6 +69,7 @@ export class Character {
   private mixer: THREE.AnimationMixer | null = null;
   private readonly clips = new Map<string, THREE.AnimationAction>();
   private currentClip = '';
+  private currentAction: THREE.AnimationAction | null = null;
   private attackingLastFrame = false;
   private attackAge = 0;
   private destroyed = false;
@@ -58,12 +78,14 @@ export class Character {
   private readonly embellishments = new THREE.Group();
   private readonly visualStatusListeners: ((ok: boolean) => void)[] = [];
   private loaded = false;
-  private animationMode: 'idle' | 'walk' | 'run' | 'jump' | 'flight' | 'charge' | 'punch' = 'idle';
+  private animationMode: GestureKind | 'idle' = 'idle';
   private hitPoseUntil = 0;
   private readonly auraRings: THREE.Mesh[] = [];
   private readonly auraSparks: { mesh: THREE.Mesh; angle: number; phase: number; distance: number }[] = [];
   private readonly auraLight = new THREE.PointLight(0x6bcaff, 0, 6);
   private static modelPromise: Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] } | null> | null = null;
+  private firstPerson = false;
+  private texturedHero = false;
 
 
   constructor(race: Race) {
@@ -174,14 +196,29 @@ export class Character {
     void this.tryLoadModel();
   }
 
+  static castAnimationForSkill(skill: SkillId): GestureKind {
+    if (skill === 'kienzan') return 'disc';
+    if (skill === 'galick' || skill === 'masenko') return 'beam';
+    return 'charge';
+  }
+
   private async tryLoadModel(): Promise<void> {
     if (!Character.modelPromise) {
-      Character.modelPromise = new GLTFLoader().loadAsync('/models/origens-warrior.glb')
-        .then(result => ({ scene: result.scene, animations: result.animations }))
-        .catch(() => null);
+      const loader = new GLTFLoader();
+      Character.modelPromise = Promise.all([
+        loader.loadAsync('/models/hero/Superhero_Male_FullBody.gltf'),
+        loader.loadAsync('/models/anims/ual1.glb').catch(() => null)
+      ]).then(([hero, motion]) => ({
+        scene: hero.scene,
+        animations: [...(motion?.animations ?? []), ...hero.animations]
+      })).catch(() => null);
     }
     const source = await Character.modelPromise;
-    if (!source || this.destroyed || source.animations.length === 0) { for (const callback of this.visualStatusListeners) callback(false); return; }
+    if (!source || this.destroyed || source.animations.length === 0) {
+      this.figure.visible = true;
+      for (const callback of this.visualStatusListeners) callback(false);
+      return;
+    }
     const model = cloneSkeleton(source.scene) as THREE.Group;
     const palette = palettes[this.race.id];
     const eyeCol = new THREE.Color(this.appearance.eyeColor);
@@ -210,15 +247,24 @@ export class Character {
         if (object.name.startsWith('HAIR_')) object.visible = false;
       }
     });
-    const bounds = new THREE.Box3().setFromObject(model);
+    model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3();
+    model.traverse(object => {
+      if (!(object instanceof THREE.Mesh) || !object.geometry) return;
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      const box = object.geometry.boundingBox;
+      if (!box) return;
+      bounds.union(box.clone().applyMatrix4(object.matrixWorld));
+    });
     const size = bounds.getSize(new THREE.Vector3());
-    if (!Number.isFinite(size.y) || size.y < 0.2 || size.y > 500) return;
-    const scale = 2.16 / size.y;
+    const height = !bounds.isEmpty() && Number.isFinite(size.y) && size.y > 0.2 && size.y < 30 ? size.y : 1.8;
+    const scale = 2.16 / height;
     model.scale.setScalar(scale);
-    model.rotation.y = 0; // A malha original olha para -Z, mesma direção do movimento.
+    model.rotation.y = Math.PI;
     model.position.set(-(bounds.min.x + size.x / 2) * scale, -bounds.min.y * scale, -(bounds.min.z + size.z / 2) * scale);
     this.headBone = model.getObjectByName('Head') ?? null;
-    if (this.headBone) {
+    this.texturedHero = Boolean(model.getObjectByName('SuperHero_Male'));
+    if (this.headBone && !this.texturedHero) {
       this.headBone.add(this.embellishments);
       this.applyFaceDetails(1 / scale);
     }
@@ -226,7 +272,7 @@ export class Character {
     this.mixer = new THREE.AnimationMixer(model);
     for (const clip of source.animations) {
       const action = this.mixer.clipAction(clip);
-      if (/punch/i.test(clip.name)) {
+      if (/punch|sword|shoot|jump_start|jump_land|hit_|death|spell_simple_enter|spell_simple_exit/i.test(clip.name)) {
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -276,7 +322,7 @@ export class Character {
     }
     this.figure.scale.set(w * h, h, w * h);
     this.face.scale.setScalar(THREE.MathUtils.clamp(a.hair === 2 ? 1.035 : 1,1,1.05));
-    if (this.headBone) this.applyFaceDetails(1 / ((this.external?.userData.baseScale as number) ?? 1));
+    if (this.headBone && !this.texturedHero) this.applyFaceDetails(1 / ((this.external?.userData.baseScale as number) ?? 1));
   }
 
   private applyFaceDetails(inverseModelScale: number): void {
@@ -304,19 +350,40 @@ export class Character {
     }
   }
 
-  gesture(kind: 'punch' | 'charge'): void {
+  gesture(kind: GestureKind): void {
     this.animationMode = kind;
-    this.hitPoseUntil = this.elapsed + (kind === 'punch' ? 0.43 : 0.24);
-    this.playClip(kind, .07);
+    const duration = kind === 'punchcross' ? 0.78 : kind === 'punch' ? 0.62 : kind === 'disc' ? 0.48 : 0.36;
+    this.hitPoseUntil = this.elapsed + duration;
+    this.currentClip = '';
+    this.playClip(kind, .08);
+  }
+
+  copyEye(target: THREE.Vector3): boolean {
+    if (!this.headBone) return false;
+    this.headBone.getWorldPosition(target);
+    return true;
+  }
+
+  setFirstPerson(enabled: boolean): void {
+    this.firstPerson = enabled;
+    if (this.headBone) this.headBone.scale.setScalar(enabled ? 0.02 : 1);
+  }
+
+  private resolveClip(name: string): THREE.AnimationAction | undefined {
+    for (const key of CLIP_ALIASES[name] ?? [name]) {
+      const action = this.clips.get(key);
+      if (action) return action;
+    }
+    return this.clips.get('idle_loop') ?? this.clips.get('idle');
   }
 
   private playClip(name: string, fade = 0.18): void {
     if (name === this.currentClip || !this.mixer) return;
-    const action = this.clips.get(name) ?? this.clips.get('standing') ?? this.clips.get('idle');
+    const action = this.resolveClip(name);
     if (!action) return;
-    const previous = this.clips.get(this.currentClip);
-    if (previous && previous !== action) previous.fadeOut(fade);
+    if (this.currentAction && this.currentAction !== action) this.currentAction.fadeOut(fade);
     action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play();
+    this.currentAction = action;
     this.currentClip = name;
   }
 
@@ -354,7 +421,7 @@ export class Character {
     }
   }
 
-  animate(dt: number, speed: number, airborne: boolean, attacking: boolean, flying = false, sprint = false): void {
+  animate(dt: number, speed: number, airborne: boolean, attacking: boolean, flying = false, sprint = false, flightPhase: FlightPhase = 'ground', activeSkill?: SkillId): void {
     this.elapsed += Math.min(dt, 0.05);
     // Fixed rates: magnitude of configurable run speed NEVER changes animation frequency.
     const moving = speed > 0.35;
@@ -375,13 +442,21 @@ export class Character {
     this.figure.position.y = flying ? Math.sin(this.elapsed * 3.0)*.035 : 0;
     this.figure.rotation.x = flying ? -.12 : 0;
     if (this.mixer && this.external) {
-      const wanted = this.animationMode === 'punch' && gestureActive ? 'punch'
-        : attacking ? 'charge' : flying ? 'flight' : airborne ? 'jump' : locomotion;
+      const skillGesture = activeSkill ? Character.castAnimationForSkill(activeSkill) : 'charge';
+      const flightClip = flightPhase === 'takeoff' ? 'flighttakeoff' : flightPhase === 'cruise' ? 'flightcruise' : 'flight';
+      const wanted = gestureActive
+        ? (this.animationMode === 'idle' ? skillGesture : this.animationMode)
+        : attacking
+          ? skillGesture
+          : flying
+            ? (sprint && moving ? 'run' : flightClip)
+            : airborne
+              ? 'jump'
+              : locomotion;
       this.playClip(wanted, wanted === 'run' || wanted === 'walk' ? .23 : .13);
-      // Animation playback is constant even if the player upgrades movement speed.
       this.mixer.update(Math.min(dt, .05));
-      this.external.rotation.x = flying ? -.15 : 0;
-      if (!gestureActive) this.animationMode = 'idle';
+      this.external.rotation.x = flying && flightPhase === 'cruise' ? -0.08 : 0;
+      if (!gestureActive && this.animationMode !== 'idle') this.animationMode = 'idle';
     }
     this.aura.visible = attacking;
     if (attacking) {

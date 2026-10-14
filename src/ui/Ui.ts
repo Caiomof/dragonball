@@ -192,7 +192,8 @@ export class Ui {
     element('target-health-label').textContent = dummyVisible ? `${dummyHealth} / ${maxDummyHealth}` : 'REGENERANDO...';
     this.target.classList.toggle('destroyed', !dummyVisible);
     this.target.classList.remove('hidden');
-    element('hud-bottom-center').textContent = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · SHIFT ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.1.6';
+    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · SHIFT ✦' : flying ? '✦ VOANDO · ESPAÇO SOBE · CTRL DESCE ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.1.7';
+    element('hud-bottom-center').textContent = sprintLabel;
   }
 
   updateSkills(_points: number): void { /* atributos gratuitos renderizados via renderAttributes */ }
