@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a202b" />
+    <meta name="description" content="Dragon Ball RPG: Origens — um protótipo de aventura 3D estilizada." />
+    <title>Dragon Ball RPG — Origens · v0.1</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <div id="game-root" aria-label="Mundo 3D de Dragon Ball RPG"></div>
+    <div id="scene-vignette"></div>
+    <div id="screen-grain"></div>
+    <div id="ui-root">
+      <header class="topline" id="topline">
+        <div class="brand-mark"><span class="brand-icon">✦</span><span>DRAGON BALL <b>RPG</b></span></div>
+        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.1</span>
+        <button id="sound-toggle" class="sound-toggle" type="button" aria-label="Alternar áudio">♫ <span>SOM ON</span></button>
+      </header>
+
+      <section id="main-menu" class="screen main-menu" aria-label="Menu principal">
+        <div class="menu-copy">
+          <div class="eyebrow"><span class="line"></span> UMA JORNADA COMEÇA</div>
+          <div class="hero-kicker">O SEU DESTINO É MAIOR</div>
+          <h1><span>DRAGON</span><span>BALL <em>RPG</em></span></h1>
+          <div class="origin-word">O R I G E N S <span>✦</span></div>
+          <p>Todo guerreiro começa de algum lugar. Descubra sua origem, desperte seu Ki e escreva sua própria lenda.</p>
+          <div class="menu-actions">
+            <button id="start-button" class="button button-primary" type="button"><span class="button-diamond">◆</span> COMEÇAR JORNADA <span class="button-arrow">→</span></button>
+            <button id="about-button" class="button button-subtle" type="button">SOBRE O PROTÓTIPO <span>↗</span></button>
+          </div>
+          <div class="menu-features"><span>✧ MUNDO 3D</span><span>✧ QUATRO RAÇAS</span><span>✧ DOMINE O KI</span></div>
+        </div>
+        <div class="main-side-note"><span>01 / 01</span><span>O PRIMEIRO PASSO PARA SE TORNAR UMA LENDA</span></div>
+        <div class="menu-bottom"><span>UM PROJETO DE FÃ · VERSÃO EXPERIMENTAL</span><span>CRIADO PARA SER JOGADO, NÃO APENAS VISTO</span></div>
+      </section>
+
+      <section id="race-screen" class="screen race-screen hidden" aria-label="Seleção de raça">
+        <div class="race-sidebar">
+          <button id="race-back" class="back-link" type="button">← VOLTAR AO MENU</button>
+          <div class="eyebrow"><span class="line"></span> ETAPA 01 / ORIGEM</div>
+          <h2>ESCOLHA<br /><em>SEU DESTINO.</em></h2>
+          <p class="race-intro">O poder está em suas mãos. Cada raça traz uma maneira diferente de começar sua jornada.</p>
+          <div id="race-options" class="race-options" role="radiogroup" aria-label="Escolha sua raça"></div>
+          <button id="race-confirm" class="button button-primary race-confirm" type="button">INICIAR AVENTURA <span class="button-arrow">→</span></button>
+        </div>
+        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D PROCEDURAL · VISUAL V0.1</span></div>
+        <div class="race-stats-panel"><span>ATRIBUTOS INICIAIS</span><div id="race-stat-rows"></div></div>
+      </section>
+
+      <section id="loading-screen" class="screen loading-screen hidden" aria-live="polite"><div class="loading-symbol">✦</div><div class="eyebrow">PREPARANDO SUA JORNADA</div><h2>O MUNDO AGUARDA.</h2><div class="loading-track"><span id="loading-progress"></span></div><p>Sincronizando sua energia...</p></section>
+
+      <section id="play-hud" class="hud hidden" aria-label="Interface do jogo">
+        <div class="hud-top-left">
+          <div class="player-card"><div class="player-emblem">✦</div><div class="player-info"><span class="hud-tiny">SEU GUERREIRO</span><strong id="hud-race">SAIYAJIN</strong><span class="power-tag">PODER DE LUTA <b id="hud-power">10</b></span></div></div>
+          <div class="resource"><div class="resource-label"><span><b class="dot health-dot"></b> VIDA</span><strong id="hud-health-label">100 / 100</strong></div><div class="resource-track"><div class="resource-fill health-fill" id="hud-health-fill"></div></div></div>
+          <div class="resource"><div class="resource-label"><span><b class="dot ki-dot"></b> ENERGIA KI</span><strong id="hud-ki-label">120 / 120</strong></div><div class="resource-track"><div class="resource-fill ki-fill" id="hud-ki-fill"></div></div></div>
+        </div>
+        <div class="world-label"><span class="world-glyph">◇</span><div><span>REGIÃO INICIAL</span><strong>PLANÍCIE ESMERALDA</strong></div><small>FIM DE TARDE · 17:42</small></div>
+        <div class="reticle"><span></span><span></span><span></span><span></span><b></b></div>
+        <div id="target-indicator" class="target-indicator hidden"><span class="target-name">◈ TOTEM DE TREINAMENTO</span><div class="target-bar"><div id="target-health-fill"></div></div><small id="target-health-label">100 / 100</small></div>
+        <div class="hud-bottom-left"><div class="hud-hint-title">CONTROLES</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVER</span></div><div><kbd>SHIFT</kbd><span>CORRER</span><kbd>ESPAÇO</kbd><span>PULAR</span></div><div><kbd>ESC</kbd><span>PAUSAR</span><kbd>MOUSE</kbd><span>CÂMERA</span></div></div>
+        <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner">✦</div></div><div class="ability-copy"><span>HABILIDADE ESPECIAL</span><strong>KAMEHAMEHA</strong><small id="ability-status">CLIque esquerdo · 25 KI</small></div><span class="ability-key">M1</span></div>
+        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.1</div>
+        <div id="toast" class="toast hidden" role="status"></div>
+        <div id="combat-number-layer"></div>
+      </section>
+
+      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">TEMPO PARA RESPIRAR</div><h2>JOGO <em>PAUSADO</em></h2><p>Sua jornada continua quando você estiver pronto.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR JOGANDO →</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
+      <div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.1</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Escolha uma das quatro raças, explore a Planície Esmeralda e teste seu Kamehameha no Totem de Treinamento.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

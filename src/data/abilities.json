@@ -1,0 +1,15 @@
+{
+  "kamehameha": {
+    "label": "KAMEHAMEHA",
+    "kiCost": 25,
+    "damage": 30,
+    "cooldownSeconds": 2,
+    "rangeMeters": 32,
+    "chargeSeconds": 0.22,
+    "beamSeconds": 0.57
+  },
+  "trainingDummy": {
+    "health": 100,
+    "respawnSeconds": 8
+  }
+}

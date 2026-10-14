@@ -1,0 +1,54 @@
+[
+  {
+    "id": "saiyajin",
+    "name": "Saiyajin",
+    "title": "Sangue de guerreiro",
+    "description": "Força instintiva e energia explosiva. Feito para superar limites.",
+    "power": 10,
+    "health": 100,
+    "ki": 120,
+    "accent": "#f5a83c",
+    "detail": "#f2cc76",
+    "trait": "Poder elevado",
+    "symbol": "星"
+  },
+  {
+    "id": "terraqueo",
+    "name": "Terráqueo",
+    "title": "Espírito indomável",
+    "description": "Técnica, resistência e determinação. Cada passo é conquistado.",
+    "power": 5,
+    "health": 110,
+    "ki": 100,
+    "accent": "#70d7cd",
+    "detail": "#c6fbef",
+    "trait": "Vida equilibrada",
+    "symbol": "地"
+  },
+  {
+    "id": "namekuseijin",
+    "name": "Namekuseijin",
+    "title": "Guardião ancestral",
+    "description": "Corpo resistente e sabedoria antiga, vindo de terras distantes.",
+    "power": 8,
+    "health": 140,
+    "ki": 90,
+    "accent": "#a2e383",
+    "detail": "#defabc",
+    "trait": "Mais resistência",
+    "symbol": "木"
+  },
+  {
+    "id": "majin",
+    "name": "Majin",
+    "title": "Essência imprevisível",
+    "description": "Energia misteriosa e um corpo extraordinário, leve e poderoso.",
+    "power": 7,
+    "health": 130,
+    "ki": 110,
+    "accent": "#f5a3cf",
+    "detail": "#ffe6f3",
+    "trait": "Vigor singular",
+    "symbol": "魔"
+  }
+]
