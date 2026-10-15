@@ -1,3 +1,6 @@
+import {JOURNEY_STEPS, journeyStage, journeyTarget, type JourneyProgress} from '../systems/Journey';
+import {BIOME_NAMES, biomeAt} from '../world/landscape';
+import type {Quality} from '../systems/Settings';
 import { SKILLS, type SkillId } from '../data/skills';
 import { RACES } from '../data/gameConfig';
 import { ATTRIBUTE_INFO, RACE_APPEARANCE, type AttributeKey, type Appearance, type PlayerProfile } from '../data/profiles';
@@ -9,7 +12,7 @@ const element = <T extends HTMLElement = HTMLElement>(id: string): T => {
   return found as T;
 };
 
-export type UiCallbacks = { start(): void; preview(id: RaceId): void; confirm(): void; back(): void; pause(): void; resume(): void; exit(): void; sound(): void; settings(): void; settingsClose(): void; skills(): void; skillsClose(): void; upgrade(type: AttributeKey, direction: number): void; heroCreate(): void; heroSelect(id: string): void; heroDelete(id: string): void; heroBack(): void; customize(appearance: Appearance, name: string): void; selectSkill(id: SkillId): void; camera(mode: 'first' | 'third'): void; fov(value: number): void; sensitivity(value: number): void };
+export type UiCallbacks = { start(): void; preview(id: RaceId): void; confirm(): void; back(): void; pause(): void; resume(): void; exit(): void; sound(): void; settings(): void; settingsClose(): void; skills(): void; skillsClose(): void; upgrade(type: AttributeKey, direction: number): void; heroCreate(): void; heroSelect(id: string): void; heroDelete(id: string): void; heroEdit(id:string):void; respawn():void; quality(value:Quality):void; volume(value:number):void; motion(value:number):void; heroBack(): void; customize(appearance: Appearance, name: string): void; selectSkill(id: SkillId): void; camera(mode: 'first' | 'third'): void; fov(value: number): void; sensitivity(value: number): void };
 
 function mixHex(picked: string, base: string, towardBase = 0.7): string {
   const channel = (hex: string, index: number) => Number.parseInt(hex.slice(index, index + 2), 16);
@@ -26,6 +29,7 @@ export class Ui {
   private readonly loading = element('loading-screen');
   private readonly hud = element('play-hud');
   private readonly pause = element('pause-screen');
+  setTarget(visible:boolean,guardian:boolean):void {this.target.classList.toggle('hidden',!visible);this.target.querySelector('.target-name')!.textContent=guardian?'GUARDIÃO DA AURORA':'TOTEM DE TREINAMENTO';}
   private readonly target = element('target-indicator');
   private readonly toastElement = element('toast');
   private toastDeadline = 0;
@@ -53,6 +57,7 @@ export class Ui {
       const target=(event.target as HTMLElement).closest<HTMLButtonElement>('[data-character]');
       if (!target) return;
       if(target.dataset.delete) this.callbacks?.heroDelete(target.dataset.character!);
+      else if(target.dataset.edit)this.callbacks?.heroEdit(target.dataset.character!);
       else this.callbacks?.heroSelect(target.dataset.character!);
     });
     for (const id of ['hero-name','hero-height','hero-build','hero-hair','hero-beard','hero-beard-style','hero-eye','hero-haircolor']) {
@@ -70,6 +75,10 @@ export class Ui {
       if (this.creatorStep < 3) this.setCreatorStep((this.creatorStep + 1) as 1 | 2 | 3);
     });
     element('race-confirm').addEventListener('click', () => this.callbacks?.confirm());
+    element('respawn-button').addEventListener('click',()=>this.callbacks?.respawn());
+    element('quality-select').addEventListener('change',e=>this.callbacks?.quality((e.target as HTMLSelectElement).value as Quality));
+    element('volume-slider').addEventListener('input',e=>this.callbacks?.volume(Number((e.target as HTMLInputElement).value)/100));
+    element('motion-slider').addEventListener('input',e=>this.callbacks?.motion(Number((e.target as HTMLInputElement).value)/100));
     element('resume-button').addEventListener('click', () => this.callbacks?.resume());
     element('exit-to-menu').addEventListener('click', () => this.callbacks?.exit());
     element('sound-toggle').addEventListener('click', () => this.callbacks?.sound());
@@ -104,8 +113,8 @@ export class Ui {
       hair: Number(element<HTMLSelectElement>('hero-hair').value),
       beardStyle: Number(element<HTMLSelectElement>('hero-beard-style').value),
       beard: Number(element<HTMLSelectElement>('hero-beard-style').value) > 0,
-      eyeColor: mixHex(element<HTMLInputElement>('hero-eye').value, RACE_APPEARANCE[this.selected].eyeColor),
-      hairColor: mixHex(element<HTMLInputElement>('hero-haircolor').value, RACE_APPEARANCE[this.selected].hairColor)
+      eyeColor: element<HTMLInputElement>('hero-eye').value,
+      hairColor: element<HTMLInputElement>('hero-haircolor').value
     };
     element('height-number').textContent=`${Math.round(appearance.height*100)}%`;
     element('build-number').textContent=`${Math.round(appearance.build*100)}%`;
@@ -129,7 +138,7 @@ export class Ui {
     const escape=(text:string)=>text.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
     element('character-list').innerHTML=profiles.length ? profiles.map(p=>{
       const race=RACES.find(r=>r.id===p.race)??RACES[0];
-      return `<article class="character-slot" style="--item-color:${race.accent}"><span class="profile-glyph">${race.symbol}</span><div><strong>${escape(p.name)}</strong><small>${race.name} · Poder ${race.power+p.attributes.power}</small></div><button class="profile-play" data-character="${p.id}" type="button">JOGAR →</button><button class="profile-delete" data-character="${p.id}" data-delete="1" type="button" title="Excluir personagem">✕</button></article>`;
+      return `<article class="character-slot" style="--item-color:${race.accent}"><span class="profile-glyph">${race.symbol}</span><div><strong>${escape(p.name)}</strong><small>${race.name} · Poder ${race.power+p.attributes.power}</small></div><button class="profile-play" data-character="${p.id}" type="button">JOGAR →</button><button class="profile-edit" data-character="${p.id}" data-edit="1" type="button">EDITAR</button><button class="profile-delete" data-character="${p.id}" data-delete="1" type="button" title="Excluir personagem">✕</button></article>`;
     }).join(''):'<p class="empty-profiles">Nenhum guerreiro criado ainda. O mundo espera por você.</p>';
   }
 
@@ -165,12 +174,16 @@ export class Ui {
       ['VIDA MÁXIMA', race.health, 150, 'health'],
       ['ENERGIA KI', race.ki, 150, 'ki']
     ].map(([label, value, max, color]) => `<div class="stat-row"><span>${label}</span><b>${value}</b><div class="stat-track"><i class="${color}" style="width:${Math.round(Number(value) / Number(max) * 100)}%"></i></div></div>`).join('');
+    const human=id==='saiyajin'||id==='terraqueo';
+    for(const control of ['hero-hair','hero-beard-style','hero-haircolor'])element(control).closest('label')?.classList.toggle('hidden',!human);
+    element('hair-swatches').classList.toggle('hidden',!human);
     this.paintSwatches();
     if (notify) this.callbacks?.preview(id);
   }
 
   setCreatorStep(step: 1 | 2 | 3): void {
     this.creatorStep = step;
+    this.races.dataset.step=String(step);
     element('step-race').classList.toggle('hidden', step !== 1);
     element('step-body').classList.toggle('hidden', step !== 2);
     element('step-face').classList.toggle('hidden', step !== 3);
@@ -192,7 +205,7 @@ export class Ui {
     const eyes = [base.eyeColor, mixHex('#88c8ff', base.eyeColor, 0.55), mixHex('#c4552a', base.eyeColor, 0.62)];
     const hairs = [base.hairColor, mixHex('#f2e2a0', base.hairColor, 0.62), mixHex('#1a1a1a', base.hairColor, 0.55)];
     const fill = (id: string, colors: string[], inputId: string) => {
-      element(id).innerHTML = colors.map(color => `<button type="button" class="swatch" data-input="${inputId}" data-color="${color}" style="background:${color}"></button>`).join('');
+      element(id).innerHTML = colors.map(color => `<button type="button" class="swatch" aria-label="Cor ${color}" data-input="${inputId}" data-color="${color}" style="background:${color}"></button>`).join('');
     };
     fill('eye-swatches', eyes, 'hero-eye');
     fill('hair-swatches', hairs, 'hero-haircolor');
@@ -207,13 +220,26 @@ export class Ui {
   }
 
   state(state: GameState): void {
-    const views: [HTMLElement, GameState][] = [[this.main, 'MAIN_MENU'], [this.characters, 'CHARACTER_SELECT'], [this.races, 'RACE_SELECTION'], [this.loading, 'LOADING'], [this.hud, 'PLAYING'], [this.pause, 'PAUSED']];
+    const views: [HTMLElement, GameState][] = [[this.main, 'MAIN_MENU'], [this.characters, 'CHARACTER_SELECT'], [this.races, 'RACE_SELECTION'], [this.loading, 'LOADING'], [this.hud, 'PLAYING'], [this.pause, 'PAUSED'], [element('defeat-screen'),'DEFEATED']];
     for (const [screen, name] of views) screen.classList.toggle('hidden', state !== name);
     element('topline').classList.toggle('hidden', state === 'PLAYING' || state === 'PAUSED' || state === 'LOADING');
     element('ui-root').dataset.state = state;
-    if (['PAUSED', 'SKILLS', 'SETTINGS'].includes(state)) this.hud.classList.remove('hidden');
+    if (['PAUSED', 'SKILLS'].includes(state)) this.hud.classList.remove('hidden');
     this.settings.classList.toggle('hidden', state !== 'SETTINGS');
     this.skills.classList.toggle('hidden', state !== 'SKILLS');
+  }
+
+  get previewYaw():number {return Number(element<HTMLInputElement>('preview-rotate').value)*Math.PI/180;}
+  get previewZoom():number {return Number(element<HTMLInputElement>('preview-zoom').value)/100;}
+  settingsValues(quality:Quality,volume:number,motion:number):void {element<HTMLSelectElement>('quality-select').value=quality;element<HTMLInputElement>('volume-slider').value=String(volume*100);element<HTMLInputElement>('motion-slider').value=String(motion*100);}
+  journey(p:JourneyProgress,x:number,z:number,yaw:number,swimming:boolean):void {
+    const stage=journeyStage(p),step=JOURNEY_STEPS[stage],target=journeyTarget(p);
+    element('journey-title').textContent=step[0];element('journey-hint').textContent=step[1];
+    element('journey-count').textContent=stage===6?'EXPLORAÇÃO LIVRE':`JORNADA · ${stage+1} / 6`;
+    element<HTMLProgressElement>('journey-progress').value=stage;
+    const d=Math.hypot(target.x-x,target.z-z),angle=Math.atan2(-(target.x-x),-(target.z-z))-yaw;
+    element('journey-direction').textContent=stage===6?'✦ Todos os santuários descobertos':stage===1?`${Math.floor(p.flight)} / 6 s no ar`:stage===2?`Lago · ${Math.round(d)} m · ${Math.floor(p.swim)} / 4 s na água`:stage===0?`${p.training} / 3 golpes · ${Math.round(d)} m até o totem`:`${Math.sin(angle)>.35?'←':Math.sin(angle)<-.35?'→':Math.cos(angle)<0?'↓':'↑'} ${target.name} · ${Math.round(d)} m`;
+    element('region-name').textContent=BIOME_NAMES[biomeAt(x,z)];element('region-surface').textContent=swimming?'ÁGUA · NATAÇÃO':'EXPLORAÇÃO · '+(stage===6?'JORNADA CONCLUÍDA':'SIGA OS SANTUÁRIOS');
   }
 
   setLoading(percent: number): void { element('loading-progress').style.width = `${percent}%`; }
@@ -249,7 +275,7 @@ export class Ui {
     element('target-health-label').textContent = dummyVisible ? `${dummyHealth} / ${maxDummyHealth}` : 'REGENERANDO...';
     this.target.classList.toggle('destroyed', !dummyVisible);
     this.target.classList.remove('hidden');
-    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · GASTA STAMINA ✦' : flying ? '✦ VOANDO · GASTA KI ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.1.14';
+    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · GASTA STAMINA ✦' : flying ? '✦ VOANDO · GASTA KI ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.2.0';
     element('hud-bottom-center').textContent = sprintLabel;
   }
 

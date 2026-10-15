@@ -1,3 +1,9 @@
+import {GuardianCycle,guardianCanHit} from '../systems/Guardian';
+import {SimulationClock} from '../systems/SimulationClock';
+import { resolveCamera } from '../systems/CameraRig';
+import { QUALITY, finiteSetting, type Quality } from '../systems/Settings';
+import { advanceJourney, journeyStage } from '../systems/Journey';
+import { biomeAt, LANDMARKS, WORLD_HALF } from '../world/landscape';
 import * as THREE from 'three';
 import { Character } from '../characters/Character';
 import { Sound } from '../audio/Sound';
@@ -24,6 +30,18 @@ export class Game {
   private readonly world: World;
   private readonly wildlife: Wildlife;
   private readonly dummy: TrainingDummy;
+  private readonly finalDummy: TrainingDummy;
+  private readonly guardianCycle=new GuardianCycle();
+  private readonly guardianWarning=new THREE.Mesh(new THREE.RingGeometry(8.6,9,64),new THREE.MeshBasicMaterial({color:0xff6b40,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false}));
+  private quality:Quality='medium';
+  private motion=.65;
+  private saveClock=0;
+  private splashClock=0;
+  private readonly frameTimes:number[]=[];
+  private wasSwimming=false;
+  private brakingUntil=0;
+  private lastMove=0;
+  private readonly simulationClock=new SimulationClock();
   private readonly combat: CombatEffects;
   private readonly ui = new Ui();
   private readonly sound = new Sound();
@@ -101,6 +119,10 @@ export class Game {
     this.world = new World(this.scene);
     this.wildlife = new Wildlife(this.world);
     this.dummy = new TrainingDummy(this.world);
+    this.finalDummy=new TrainingDummy(this.world,new THREE.Vector3(43,this.world.height(43,119),119),180);
+    this.finalDummy.group.name='Guardião da Aurora';this.finalDummy.group.visible=false;
+    this.guardianWarning.rotation.x=-Math.PI/2;this.guardianWarning.position.copy(this.finalDummy.group.position).add(new THREE.Vector3(0,.12,0));this.scene.add(this.guardianWarning);
+    void this.wildlife.ready.catch(()=>{});
     this.combat = new CombatEffects(this.scene);
     this.character = new Character(RACES[0]);
     this.stats = createStats(RACES[0]);
@@ -113,7 +135,13 @@ export class Game {
       this.viewMode = stored.mode === 'first' ? 'first' : 'third';
       this.fov = THREE.MathUtils.clamp(Number(stored.fov) || 70, 55, 105);
       this.sensitivity = THREE.MathUtils.clamp(Number(stored.sensitivity) || 1, 0.45, 1.9);
+      this.quality=['low','medium','high'].includes(stored.quality)?stored.quality:'medium';
+      this.motion=finiteSetting(stored.motion,matchMedia('(prefers-reduced-motion: reduce)').matches?0:.65,0,1);
+      this.sound.volume=finiteSetting(stored.volume,.65,0,1);this.sound.enabled=stored.sound!==false;
     } catch { /* configuração inválida: usar padrões */ }
+    this.applyQuality();this.ui.settingsValues(this.quality,this.sound.volume,this.motion);this.ui.setSound(this.sound.enabled);
+    window.addEventListener('origens:storage-error',()=>this.ui.toast('NÃO FOI POSSÍVEL SALVAR NESTE NAVEGADOR. LIBERE ESPAÇO OU PERMITA ARMAZENAMENTO.','danger',6));
+    document.body.append(document.getElementById('toast')!);
     this.buildFirstPersonHands();
     this.camera.fov = this.fov;
     this.camera.updateProjectionMatrix();
@@ -126,6 +154,11 @@ export class Game {
       heroCreate: () => this.createHero(),
       heroSelect: id => this.playHero(id),
       heroDelete: id => this.deleteHero(id),
+      heroEdit: id => this.editHero(id),
+      respawn:()=>this.respawn(),
+      quality:value=>{this.quality=value;this.applyQuality();this.persistSettings();},
+      volume:value=>{this.sound.volume=value;this.persistSettings();},
+      motion:value=>{this.motion=value;this.persistSettings();},
       heroBack: () => this.changeState('MAIN_MENU'),
       customize: (appearance, name) => this.previewCustomization(appearance, name),
       preview: id => { this.sound.play('select'); this.selectRace(id, true); },
@@ -134,7 +167,7 @@ export class Game {
       pause: () => this.pause(),
       resume: () => this.resume(),
       exit: () => this.returnToMenu(),
-      sound: () => { this.sound.enabled = !this.sound.enabled; this.ui.setSound(this.sound.enabled); this.sound.play('click'); },
+      sound: () => { this.sound.enabled = !this.sound.enabled; this.ui.setSound(this.sound.enabled); this.sound.play('click'); this.persistSettings(); },
       settings: () => this.openPanel('SETTINGS'),
       settingsClose: () => this.closePanel(),
       skills: () => this.openPanel('SKILLS'),
@@ -149,32 +182,43 @@ export class Game {
     this.changeState('MAIN_MENU');
     requestAnimationFrame(this.tick);
     (window as Window & { __DBRPG_DEBUG__?: () => object }).__DBRPG_DEBUG__ = () => this.debugState();
+    if(import.meta.env.DEV)Object.assign(window,{__DBRPG_TEST__:{
+      teleport:(x:number,z:number,y?:number)=>{this.character.root.position.set(x,y??this.world.height(x,z),z);this.horizontalVelocity.set(0,0,0);this.verticalVelocity=0;},
+      look:(yaw:number,pitch=0)=>{this.yaw=yaw;this.pitch=pitch;},
+      camera:()=>this.camera.position.toArray(),
+      heroBounds:()=>new THREE.Box3().setFromObject(this.character.root).getSize(new THREE.Vector3()).toArray(),
+      frame:()=>this.renderer.domElement.toDataURL(),
+      scene:()=>this.scene,
+    }});
   }
 
   private persistSettings(): void {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ mode: this.viewMode, fov: this.fov, sensitivity: this.sensitivity })); } catch { /* storage opcional */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ mode: this.viewMode, fov: this.fov, sensitivity: this.sensitivity, quality:this.quality, motion:this.motion, volume:this.sound.volume, sound:this.sound.enabled })); } catch { /* storage opcional */ }
   }
 
   private changeState(state: GameState): void {
     this.state = state;
     this.ui.state(state);
-    if (state !== 'PLAYING' && state !== 'PAUSED') this.keys.clear();
+    if(state!=='PLAYING'){this.keys.clear();this.cancelActions();}
+    this.simulationClock.reset();
+    if(state==='RACE_SELECTION')this.camera.setViewOffset(innerWidth,innerHeight,-innerWidth*.18,0,innerWidth,innerHeight);else this.camera.clearViewOffset();
     if (state === 'RACE_SELECTION') this.selectRace(this.ui.selected);
     const inPlay = state === 'PLAYING';
     const first = inPlay && this.viewMode === 'first';
     this.character.root.visible = inPlay && (this.viewMode === 'third' || this.heroReady);
     this.character.setFirstPerson(first && this.heroReady);
-    this.firstPersonArms.visible = first && !this.heroReady;
+    this.firstPersonArms.visible = first;
   }
 
   private selectRace(race: RaceId, applyLook = false): void {
     this.raceId = race;
     this.scene.remove(this.character.root);
     this.character.dispose();
+    this.heroReady=false;
     this.character = new Character(getRace(race));
     this.character.onModelStatus(ok => {
       this.heroReady = ok;
-      if (!ok) this.ui.toast('ERRO AO CARREGAR O MODELO 3D. VERIFIQUE A PASTA public/models.', 'danger', 8);
+      if (!ok) this.ui.toast('NÃO FOI POSSÍVEL CARREGAR O GUERREIRO. VOLTE E TENTE NOVAMENTE.', 'danger', 8);
     });
     const skins: Record<RaceId, number> = { saiyajin: 0xe6b18a, terraqueo: 0xbd8061, namekuseijin: 0x74bb63, majin: 0xef9dc0 };
     const sleeves: Record<RaceId, number> = { saiyajin: 0x235caa, terraqueo: 0x269d92, namekuseijin: 0x8c6bb2, majin: 0x42445c };
@@ -191,7 +235,7 @@ export class Game {
     this.scene.add(this.character.root);
   }
 
-  private startAdventure(): void {
+  private async startAdventure(): Promise<void> {
     this.sound.play('select');
     this.selectRace(this.ui.selected);
     if (!this.editingProfile) this.editingProfile = makeProfile(this.raceId);
@@ -207,6 +251,8 @@ export class Game {
     this.stats.health=this.stats.maxHealth;
     this.stats.ki=this.stats.maxKi;
     this.stats.stamina=this.stats.maxStamina;
+    this.character.root.position.copy(this.checkpointPosition());
+    this.finalDummy.reset();this.guardianCycle.update(0,false);this.finalDummy.group.visible=journeyStage(this.activeProfile.progress)===5;
     this.character.root.rotation.y = 0;
     this.horizontalVelocity.set(0, 0, 0);
     this.verticalVelocity = 0;
@@ -224,18 +270,55 @@ export class Game {
     this.pitch = -0.035;
     this.changeState('LOADING');
     this.ui.setLoading(16);
-    const loadingStart = performance.now();
-    const loading = () => {
-      if (this.state !== 'LOADING') return;
-      const t = (performance.now() - loadingStart) / 550;
-      this.ui.setLoading(Math.round(Math.min(100, 16 + t * 84)));
-      if (t < 1) requestAnimationFrame(loading);
-      else {
-        this.changeState('PLAYING');
-        this.ui.toast('BEM-VINDO À PLANÍCIE ESMERALDA', 'success', 2.7);
-      }
-    };
-    requestAnimationFrame(loading);
+    const character=this.character;
+    try{
+      const [loaded]=await Promise.all([character.ready,this.wildlife.ready]);
+      if(this.state!=='LOADING'||this.character!==character)return;
+      if(!loaded)throw new Error('Hero unavailable');
+      this.ui.setLoading(100);this.changeState('PLAYING');this.updateJourney(0);
+      this.ui.toast('JORNADA INICIADA · SIGA SEU OBJETIVO', 'success',2.7);
+    }catch(error){
+      console.error('Falha ao carregar recursos do jogo',error);
+      this.ui.renderProfiles(this.profiles);this.changeState('CHARACTER_SELECT');
+      this.ui.toast('FALHA AO CARREGAR O JOGO. RECARREGUE A PÁGINA PARA TENTAR NOVAMENTE.','danger',8);
+    }
+  }
+
+  private applyQuality():void {
+    const preset=QUALITY[this.quality];this.renderer.setPixelRatio(Math.min(devicePixelRatio,preset.pixelRatio));
+    this.renderer.shadowMap.enabled=preset.shadows;this.world.setQuality(this.quality==='low');
+    this.camera.far=this.quality==='low'?180:this.quality==='medium'?300:650;this.camera.updateProjectionMatrix();
+  }
+  private checkpointPosition():THREE.Vector3 {
+    const p=LANDMARKS.find(p=>p.id===this.activeProfile?.checkpoint)??LANDMARKS[0];
+    const z=p.z+9;return new THREE.Vector3(p.x,this.world.height(p.x,z),z);
+  }
+  private cancelActions():void {
+    this.cancelCharge();this.kiBlastHeld=false;this.powerSurge=false;this.pendingShot=null;this.attackEnd=this.elapsed;this.rootedUntil=this.elapsed;
+    this.character?.setAuraActive(false);this.fpEnergy.visible=false;
+  }
+  private respawn():void {
+    if(this.state!=='DEFEATED')return;
+    this.cancelActions();this.character.root.position.copy(this.checkpointPosition());
+    this.stats.health=this.stats.maxHealth;this.stats.ki=this.stats.maxKi;this.stats.stamina=this.stats.maxStamina;
+    this.horizontalVelocity.set(0,0,0);this.verticalVelocity=0;this.grounded=true;this.flying=false;
+    this.changeState('PLAYING');this.requestCapture();
+  }
+  private updateJourney(dt:number):void {
+    if(!this.activeProfile)return;
+    const pos=this.character.root.position,p=this.activeProfile.progress;
+    if(advanceJourney(p,dt,pos.x,pos.z,this.flying,this.world.inRiver(pos.x,pos.z)&&!this.flying)){
+      if(p.snow)this.activeProfile.checkpoint='snow';else if(p.desert)this.activeProfile.checkpoint='desert';
+      saveProfiles(this.profiles);this.sound.play('select');this.ui.toast('ETAPA CONCLUÍDA · NOVO OBJETIVO','success',2);
+    }
+    this.finalDummy.group.visible=journeyStage(p)===5;
+    if(!this.finalDummy.group.visible)this.guardianWarning.visible=false;
+    this.ui.journey(p,pos.x,pos.z,this.yaw,this.world.inRiver(pos.x,pos.z)&&!this.flying);
+    this.saveClock+=dt;if(this.saveClock>5){this.saveClock=0;saveProfiles(this.profiles);}
+  }
+  private editHero(id:string):void {
+    const p=this.profiles.find(p=>p.id===id);if(!p)return;
+    this.editingProfile=structuredClone(p);this.ui.select(p.race,false);this.ui.editAppearance(p.appearance,p.name);this.ui.setCreatorStep(3);this.changeState('RACE_SELECTION');
   }
 
   private requestCapture(): void {
@@ -252,7 +335,7 @@ export class Game {
     this.requestCapture();
   }
   private openPanel(panel: 'SETTINGS' | 'SKILLS'): void {
-    if (panel === 'SETTINGS' && this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
+    if (panel === 'SETTINGS' && !['PLAYING','PAUSED','MAIN_MENU'].includes(this.state)) return;
     if (panel === 'SKILLS' && this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
     this.beforePanel = this.state;
     this.changeState(panel);
@@ -270,6 +353,7 @@ export class Game {
     if (this.beforePanel === 'PLAYING') this.requestCapture();
   }
   private returnToMenu(): void {
+    if(this.activeProfile)saveProfiles(this.profiles);
     this.cancelCharge();
     this.kiBlastHeld = false;
     this.powerSurge = false;
@@ -284,6 +368,7 @@ export class Game {
   }
 
   private createHero(): void {
+    if(this.profiles.length>=32){this.ui.toast('LIMITE DE 32 GUERREIROS. EXCLUA UM PERFIL PARA CRIAR OUTRO.','info',3);return;}
     this.editingProfile = makeProfile();
     this.ui.editAppearance(this.editingProfile.appearance, this.editingProfile.name);
     this.ui.select(this.editingProfile.race, false);
@@ -325,8 +410,8 @@ export class Game {
     this.stats.stamina=Math.min(this.stats.stamina,this.stats.maxStamina);
     this.stats.power=Math.max(1,race.power+a.power);
     this.stats.kiRegen=Math.max(1,a.kiRegen);
-    this.stats.speed=Math.max(0.4,a.speed);
-    this.stats.flight=Math.max(0.4,a.flight);
+    this.stats.speed=THREE.MathUtils.clamp(a.speed,.4,2.5);
+    this.stats.flight=THREE.MathUtils.clamp(a.flight,.4,2.5);
   }
 
   private renderAttributes(): void {
@@ -357,6 +442,7 @@ export class Game {
 
   private selectSkill(id: SkillId): void {
     this.activeSkill = id;
+    this.character.setTechnique(id);
     this.ui.highlightSkill(id);
     this.ui.toast(`${SKILLS.find(s => s.id === id)!.label.toUpperCase()} SELECIONADO`, 'info', 0.75);
   }
@@ -383,19 +469,21 @@ export class Game {
         else if (this.state === 'CHARACTER_SELECT') this.changeState('MAIN_MENU');
         return;
       }
+      if((event.code==='KeyK'&&this.state==='SKILLS')||(event.code==='KeyO'&&this.state==='SETTINGS')){this.closePanel();return;}
       if (this.state !== 'PLAYING') return;
       if (event.repeat) return;
       if (event.code === 'KeyV') { this.viewMode = this.viewMode === 'third' ? 'first' : 'third'; this.persistSettings(); this.ui.setView(this.viewMode, this.fov, this.sensitivity); this.ui.toast(this.viewMode === 'first' ? 'VISÃO EM PRIMEIRA PESSOA' : 'VISÃO EM TERCEIRA PESSOA'); return; }
       if (event.code === 'KeyK') { this.openPanel('SKILLS'); return; }
       if (event.code === 'KeyO') { this.openPanel('SETTINGS'); return; }
       if (event.code === 'KeyX' && !event.repeat) {
+        if(this.heldSkill||this.kiBlastHeld||this.pendingShot||this.flying)return;
         this.powerSurge = true;
         this.powerSurgeSince = this.elapsed;
         const aura = this.raceAuraColors();
         this.character.setAuraColor(aura.color, aura.core);
         this.character.setAuraActive(true, 'surge');
         this.character.gesture('charge');
-        this.ui.toast('PODER MÁXIMO · CARREGANDO KI', 'success', 1.1);
+        this.ui.toast('CONCENTRAÇÃO · RECUPERANDO KI', 'success', 1.1);
         this.sound.play('charge');
         return;
       }
@@ -409,6 +497,7 @@ export class Game {
       if (event.code === 'Space') {
         const now = performance.now();
         if (now - this.lastSpaceAt <= 320) {
+          if(!this.flying&&this.stats.ki<8){this.ui.toast('RECUPERE KI COM X ANTES DE VOAR','info');return;}
           this.flying = !this.flying;
           if (this.flying) this.flyingSince = this.elapsed;
           this.grounded = false;
@@ -435,9 +524,12 @@ export class Game {
           this.ui.setCharge(null, 0, 1);
         }
       }
-      if (/^Digit[1-4]$/.test(event.code) && this.heldSkill === SKILLS[Number(event.code.slice(-1))-1].id) this.releaseCharge();
+      if (this.state==='PLAYING' && /^Digit[1-4]$/.test(event.code) && this.heldSkill === SKILLS[Number(event.code.slice(-1))-1].id) this.releaseCharge();
     });
-    window.addEventListener('blur', () => { this.keys.clear(); this.cancelCharge(); });
+    window.addEventListener('blur', () => { this.keys.clear(); this.cancelActions();if(this.state==='PLAYING')this.pause(); });
+    document.addEventListener('visibilitychange',()=>{if(document.hidden&&this.state==='PLAYING')this.pause();});
+    document.addEventListener('pointerlockchange',()=>{if(!document.pointerLockElement&&this.state==='PLAYING')this.pause();});
+    window.addEventListener('pagehide',()=>saveProfiles(this.profiles));
     window.addEventListener('mousemove', event => {
       if (this.state !== 'PLAYING') return;
       if (document.pointerLockElement === this.renderer.domElement || event.buttons === 2) {
@@ -452,7 +544,7 @@ export class Game {
       if (event.button === 2) this.beginKiBlast();
     });
     window.addEventListener('mouseup', event => {
-      if (event.button === 2) this.releaseKiBlast();
+      if (event.button === 2&&this.state==='PLAYING') this.releaseKiBlast();
     });
     window.addEventListener('wheel', event => {
       if (this.state !== 'PLAYING') return;
@@ -477,12 +569,16 @@ export class Game {
     });
   }
 
-  private aim(): WorldHit {
-    const dir = this.forward();
-    return this.world.trace(this.camera.position, dir, 115, this.dummy);
+  private traceTargets(origin:THREE.Vector3,direction:THREE.Vector3,range:number):WorldHit {
+    const hit=this.world.trace(origin,direction,range,this.dummy);
+    if(this.finalDummy.group.visible){const other=this.world.trace(origin,direction,range,this.finalDummy);if(other.dummy&&other.distance<hit.distance)return {...other,final:true};}
+    return hit;
   }
+  private aim():WorldHit {return this.traceTargets(this.camera.position,this.forward(),140);}
 
   private beginCharge(id: SkillId): void {
+    if(this.kiBlastHeld||this.powerSurge||this.pendingShot||this.elapsed<this.rootedUntil)return;
+    this.character.setTechnique(id);
     if (this.heldSkill)return;
     const spec=SKILLS.find(s=>s.id===id)!;
     const remaining=(this.cooldownUntil.get(id)??0)-this.elapsed;
@@ -546,16 +642,18 @@ export class Game {
 
   private castAttack(style: AttackStyle, color: number, core: number, range: number, chargeSeconds: number, effectSeconds: number, damage: number, size=1): void {
     this.camera.updateMatrixWorld();
-    const hit=this.aim();
+    let hit=this.aim();
     const muzzle=this.viewMode==='first'
       ?this.camera.position.clone().addScaledVector(this.forward(),1.12).add(new THREE.Vector3(0,-.18,0))
       :this.character.getMuzzleWorldPosition();
     const travel=hit.point.clone().sub(muzzle);
-    const destination=travel.length()>range ? muzzle.clone().addScaledVector(travel.normalize(),range):hit.point.clone();
+    let destination=travel.length()>range ? muzzle.clone().addScaledVector(travel.normalize(),range):hit.point.clone();
+    const path=destination.clone().sub(muzzle);const obstruction=this.traceTargets(muzzle,path.clone().normalize(),path.length());
+    if(obstruction.distance<path.length()-.05){hit=obstruction;destination=obstruction.point;}
     this.character.root.rotation.y=this.yaw;
     this.combat.cast(muzzle,destination,{style,color,core,chargeSeconds,effectSeconds,size},point=>{
-      const beast = this.wildlife.damageAlong(muzzle, destination, 3.8, damage);
-      if (beast?.dead) this.ui.toast('ANIMAL DERROTADO', 'success', 0.7);
+      const beast = this.wildlife.damageAlong(muzzle, destination, style==='kienzan'?.65:.35+size*.16, damage);
+      if(beast){this.ui.toast(beast.dead?'ANIMAL DERROTADO':`ACERTO · ${beast.actual}`,beast.dead?'success':'info',.7);this.sound.play('impact');return;}
       this.applyHit(hit,destination,damage,point);
     });
   }
@@ -564,7 +662,14 @@ export class Game {
     this.sound.play('impact');
     if(hit.point.distanceTo(destination)>.3)return;
     let result={actual:0,dead:false};
-    if(hit.dummy) result=this.dummy.takeDamage(amount);
+    if(hit.dummy) {
+      result=(hit.final?this.finalDummy:this.dummy).takeDamage(amount);
+      if(this.activeProfile&&result.actual>0){
+        if(hit.final&&result.dead&&journeyStage(this.activeProfile.progress)===5){this.activeProfile.progress.final=true;this.ui.toast('JORNADA CONCLUÍDA · GUERREIRO DA AURORA','success',5);}
+        else if(!hit.final&&journeyStage(this.activeProfile.progress)===0)this.activeProfile.progress.training=Math.min(3,this.activeProfile.progress.training+1);
+        saveProfiles(this.profiles);this.updateJourney(0);
+      }
+    }
     else if(hit.objectId!==undefined)result=this.world.damage(hit.objectId,amount);
     if(result.actual===0)return;
     const screen=point.clone().project(this.camera);
@@ -573,7 +678,7 @@ export class Game {
   }
 
   private punch():void {
-    if(this.elapsed-this.lastMelee<.31||this.stats.stamina<7)return;
+    if(this.state!=='PLAYING'||this.pendingShot||this.heldSkill||this.kiBlastHeld||this.powerSurge||this.elapsed-this.lastMelee<.38||this.stats.stamina<7)return;
     this.stats.stamina-=7;
     this.staminaRegenDelay=this.elapsed+.7;
     this.comboStep=(this.elapsed-this.lastMeleeCombo<.85?this.comboStep%3+1:1);
@@ -582,7 +687,10 @@ export class Game {
     this.character.root.rotation.y=this.yaw;
     this.attackEnd = this.elapsed + (this.comboStep === 2 ? 0.72 : 0.5);
     this.character.gesture(this.comboStep===2?'punchcross':'punch');
-    this.sound.play('impact');
+    this.pendingShot={at:this.elapsed+.16,run:()=>this.resolvePunch()};
+  }
+
+  private resolvePunch():void {
     const origin=this.character.root.position.clone().add(new THREE.Vector3(0,1.3,0));
     const dir=this.forward();
     // Detect a melee target from the fighter (not from the distant third-person camera).
@@ -591,7 +699,7 @@ export class Game {
       this.ui.toast(beast.dead ? 'ANIMAL DERROTADO' : `GOLPE · ${beast.actual}`, beast.dead ? 'success' : 'info', 0.6);
       return;
     }
-    const hit=this.world.trace(origin,dir,3.05,this.dummy);
+    const hit=this.traceTargets(origin,dir,3.05);
     if(hit.point.distanceTo(origin)>3.06)return;
     const amount=Math.round((7+this.comboStep*3)*this.powerMultiplier());
     this.applyHit(hit,hit.point,amount,hit.point);
@@ -599,6 +707,7 @@ export class Game {
   }
 
   private beginKiBlast(): void {
+    if(this.heldSkill||this.powerSurge||this.pendingShot||this.elapsed<this.rootedUntil)return;
     if (this.kiBlastHeld || this.elapsed - this.lastKiBall < 0.22) return;
     if (this.stats.ki < 4) { this.ui.toast('KI INSUFICIENTE', 'danger', .7); return; }
     this.kiBlastHeld = true;
@@ -637,14 +746,14 @@ export class Game {
     };
   }
 
-  private tick = (time: number): void => {
-    const dt = Math.min(0.05, Math.max(0, (time - this.lastFrame) / 1000));
-    this.lastFrame = time;
-    this.cameraTime += dt;
-    this.world.update(dt);
-    this.combat.update(dt);
-    this.dummy.update(dt, this.camera);
-    if (this.state === 'PLAYING') {
+  private damagePlayer(amount:number,message:string):void {
+    this.stats.health=Math.max(0,this.stats.health-amount);this.ui.toast(message,'danger',1.2);
+    if(this.stats.health<=0){saveProfiles(this.profiles);this.changeState('DEFEATED');if(document.pointerLockElement)void document.exitPointerLock();}
+  }
+
+  private simulate(dt:number):void {
+    this.world.update(dt);this.combat.update(dt);this.dummy.update(dt,this.camera);this.finalDummy.update(dt,this.camera);
+
       this.elapsed += dt;
       if (this.pendingShot && this.elapsed >= this.pendingShot.at) {
         const shot = this.pendingShot;
@@ -652,26 +761,34 @@ export class Game {
         shot.run();
       }
       this.wildlife.update(dt, this.character.root.position, amount => {
-        this.stats.health = Math.max(0, this.stats.health - amount);
-        this.ui.toast('UM LOBO TE ALCANÇOU', 'danger', 0.6);
-        if (this.stats.health <= 0) {
-          this.stats.health = this.stats.maxHealth;
-          this.character.root.position.copy(this.world.spawn);
-          this.flying = false;
-          this.ui.toast('VOCÊ CAIU · DE VOLTA AO INÍCIO', 'danger', 1.4);
-        }
+        if(this.state!=='PLAYING')return;
+        this.sound.play('animal');
+        this.damagePlayer(amount,'UM LOBO TE ALCANÇOU');
       });
+      if(this.state!=='PLAYING')return;
+      const guardian=this.finalDummy.group.position,player=this.character.root.position;
+      const distance=Math.hypot(player.x-guardian.x,player.z-guardian.z);
+      const pulse=this.guardianCycle.update(dt,this.finalDummy.group.visible&&distance<24);
+      this.guardianWarning.visible=pulse.warning>0;this.guardianWarning.material.opacity=.25+pulse.warning*.65;
+      if(pulse.impact){
+        const origin=guardian.clone().add(new THREE.Vector3(0,1,0)),direction=player.clone().add(new THREE.Vector3(0,1,0)).sub(origin);const range=direction.length();
+        const clear=range<.01||this.world.trace(origin,direction.normalize(),range).distance>=range-.3;
+        this.sound.play('impact');
+        if(guardianCanHit(distance,player.y-guardian.y,clear))this.damagePlayer(12,'ONDA DO GUARDIÃO · SAIA DO CÍRCULO OU VOE');
+      }
+      if(this.state!=='PLAYING')return;
       this.updatePlayer(dt);
+      this.updateJourney(dt);
       this.updateCamera(dt);
       this.updateFirstPersonHands(dt);
-      this.stats.ki = Math.min(this.stats.maxKi, this.stats.ki + (this.elapsed > this.attackEnd + .8 && !this.heldSkill ? this.stats.kiRegen : 0) * dt);
+      this.stats.ki = Math.min(this.stats.maxKi, this.stats.ki + (this.elapsed > this.attackEnd + .8 && !this.heldSkill && !this.flying && !this.powerSurge ? this.stats.kiRegen : 0) * dt);
       if(this.elapsed>this.staminaRegenDelay)this.stats.stamina=Math.min(this.stats.maxStamina,this.stats.stamina+22*dt);
       if (this.powerSurge) {
         this.stats.stamina = Math.max(0, this.stats.stamina - 14 * dt);
-        this.stats.ki = Math.max(0, this.stats.ki - 4 * dt);
+        this.stats.ki = Math.min(this.stats.maxKi, this.stats.ki + (18+this.stats.kiRegen) * dt);
         this.character.setAuraActive(true, 'surge');
         const seconds = Math.min(2.8, this.elapsed - this.powerSurgeSince);
-        this.ui.setCharge('PODER MÁXIMO', seconds / 2.8, 1 + seconds * 0.22);
+        this.ui.setCharge('CONCENTRAÇÃO', seconds / 2.8, 1 + seconds * 0.22);
         if (this.stats.stamina <= 0.5) { this.powerSurge = false; this.character.setAuraActive(false); this.ui.setCharge(null, 0, 1); this.ui.toast('STAMINA ESGOTADA', 'info', .8); }
       } else if (this.kiBlastHeld) {
         const held = THREE.MathUtils.clamp(this.elapsed - this.kiBlastSince, 0, 0.85);
@@ -692,12 +809,23 @@ export class Game {
       }
       const cds = Object.fromEntries(SKILLS.map(skill => [skill.id, Math.max(0, (this.cooldownUntil.get(skill.id) ?? 0) - this.elapsed)])) as Partial<Record<SkillId, number>>;
       const cooldown = cds[this.activeSkill] ?? 0;
-      this.ui.updateHud(this.stats, cooldown, this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'), this.horizontalVelocity.length(), this.dummy.health, this.dummy.maxHealth, this.dummy.health > 0, getRace(this.raceId), this.activeSkill, cds, this.flying);
+      this.ui.updateHud(this.stats, cooldown, this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'), this.horizontalVelocity.length(), (this.finalDummy.group.visible?this.finalDummy:this.dummy).health, (this.finalDummy.group.visible?this.finalDummy:this.dummy).maxHealth, (this.finalDummy.group.visible?this.finalDummy:this.dummy).health > 0, getRace(this.raceId), this.activeSkill, cds, this.flying);
+      const target=this.finalDummy.group.visible?this.finalDummy:this.dummy;
+      this.ui.setTarget(target.group.position.distanceTo(this.character.root.position)<35,this.finalDummy.group.visible);
       if (this.frameCounter % 4 === 0) {
         const aim = this.aim();
         this.ui.setAimHit(Boolean(aim.dummy || aim.objectId !== undefined));
       }
-    } else if (this.state === 'MAIN_MENU') {
+  }
+
+  private tick = (time:number):void => {
+    const realDt=Math.max(0,(time-this.lastFrame)/1000);this.lastFrame=time;
+    const dt=Math.min(.05,realDt);this.cameraTime+=dt;
+    this.frameTimes.push(realDt*1000);if(this.frameTimes.length>120)this.frameTimes.shift();
+    for(const step of this.simulationClock.advance(realDt))if(this.state==='PLAYING')this.simulate(step);
+    const pos=this.character.root.position;
+    this.sound.update(Math.min(realDt,.25),this.state==='PLAYING',this.horizontalVelocity.length(),this.world.inRiver(pos.x,pos.z)&&!this.flying,this.flying,biomeAt(pos.x,pos.z),Boolean(this.heldSkill||this.powerSurge));
+    if (this.state === 'MAIN_MENU') {
       this.character.setFirstPerson(false);
       this.character.root.visible = true;
       this.character.root.rotation.y = Math.PI - Math.sin(this.cameraTime * 0.26) * 0.18;
@@ -709,25 +837,25 @@ export class Game {
       this.character.setFirstPerson(false);
       this.character.root.visible = true;
       const step = this.ui.creatorStep;
-      this.character.root.rotation.y = step === 3 ? Math.PI * 0.72 : Math.PI * 0.5;
+      this.character.root.rotation.y = Math.PI+this.ui.previewYaw;
       this.character.animate(dt, 0, false, false);
       const p = this.world.spawn;
       const view = step === 3
-        ? new THREE.Vector3(p.x + 1.35, p.y + 1.85, p.z + 2.15)
-        : new THREE.Vector3(p.x + 3.8, p.y + 1.2, p.z + 0.15);
-      this.camera.position.lerp(view, Math.min(1, dt * 3));
-      this.camera.lookAt(p.x, p.y + (step === 3 ? 1.65 : 1.15), p.z);
+        ? new THREE.Vector3(p.x, p.y + 1.95, p.z + 1.1/this.ui.previewZoom)
+        : new THREE.Vector3(p.x, p.y + 1.45, p.z + 4.1/this.ui.previewZoom);
+      this.camera.position.copy(view);
+      this.camera.lookAt(p.x, p.y + (step === 3 ? 1.94 : 1.2), p.z);
     }
     this.frameCounter++;
-    if (this.frameCounter % 30 === 0 && dt > 0) this.fps = Math.round(1 / dt);
+    if (this.frameCounter % 30 === 0 && dt > 0) this.fps = Math.round(1000/(this.frameTimes.reduce((a,b)=>a+b,0)/this.frameTimes.length));
     this.ui.update();
-    if (this.debug) this.debugOverlay.textContent = `DEBUG v0.1.14 · FPS ${this.fps}\nEstado: ${this.state}\nRaça: ${this.raceId}\nPosição: ${this.character.root.position.toArray().map(v => v.toFixed(1)).join(', ')}\nVisão: ${this.viewMode} FOV ${this.fov}\nVoando: ${this.flying}\nNo chão: ${this.grounded}\nKi: ${Math.round(this.stats.ki)}\nPoder: ${this.stats.power}\nHabilidade: ${this.activeSkill}\nStamina: ${this.stats.stamina.toFixed(0)}\nObjetos destrutíveis: ${this.world.breakableCount}`;
+    if (this.debug) this.debugOverlay.textContent = `DEBUG v0.2.0 · FPS ${this.fps}\nEstado: ${this.state}\nRaça: ${this.raceId}\nPosição: ${this.character.root.position.toArray().map(v => v.toFixed(1)).join(', ')}\nVisão: ${this.viewMode} FOV ${this.fov}\nVoando: ${this.flying}\nNo chão: ${this.grounded}\nKi: ${Math.round(this.stats.ki)}\nPoder: ${this.stats.power}\nHabilidade: ${this.activeSkill}\nStamina: ${this.stats.stamina.toFixed(0)}\nObjetos destrutíveis: ${this.world.breakableCount}`;
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.tick);
   };
 
   private updatePlayer(dt: number): void {
-    const rooted = Boolean(this.heldSkill || this.kiBlastHeld || this.pendingShot || this.elapsed < this.rootedUntil);
+    const rooted = Boolean(this.heldSkill || this.powerSurge || this.kiBlastHeld || this.pendingShot || this.elapsed < this.rootedUntil);
     let inputX = Number(this.keys.has('KeyD') || this.keys.has('ArrowRight')) - Number(this.keys.has('KeyA') || this.keys.has('ArrowLeft'));
     let inputZ = Number(this.keys.has('KeyW') || this.keys.has('ArrowUp')) - Number(this.keys.has('KeyS') || this.keys.has('ArrowDown'));
     if (rooted) { inputX = 0; inputZ = 0; }
@@ -754,23 +882,27 @@ export class Game {
     const pos = this.character.root.position;
     const nextX = pos.x + this.horizontalVelocity.x * dt;
     const nextZ = pos.z + this.horizontalVelocity.z * dt;
-    if (this.flying || this.world.isWalkable(nextX, pos.z)) pos.x = nextX;
+    if (this.flying ? this.world.canFly(nextX,pos.y,pos.z) : this.world.isWalkable(nextX, pos.z)) pos.x = nextX;
     else this.horizontalVelocity.x = 0;
-    if (this.flying || this.world.isWalkable(pos.x, nextZ)) pos.z = nextZ;
+    if (this.flying ? this.world.canFly(pos.x,pos.y,nextZ) : this.world.isWalkable(pos.x, nextZ)) pos.z = nextZ;
     else this.horizontalVelocity.z = 0;
     const ground = this.world.height(pos.x, pos.z);
+    pos.x=THREE.MathUtils.clamp(pos.x,-WORLD_HALF+4,WORLD_HALF-4);pos.z=THREE.MathUtils.clamp(pos.z,-WORLD_HALF+4,WORLD_HALF-4);
     const swimming = !this.flying && this.world.inRiver(pos.x, pos.z);
+    if(swimming!==this.wasSwimming){this.world.splash(pos.x,pos.z);this.sound.play('water');this.wasSwimming=swimming;}
+    this.splashClock+=dt;if(swimming&&this.splashClock>.45&&this.horizontalVelocity.length()>.1){this.splashClock=0;this.world.splash(pos.x,pos.z);}
     if (swimming) {
-      const surface = this.world.waterLevel(pos.x, pos.z) - 0.22;
+      const surface = this.world.waterLevel(pos.x, pos.z) + .12 - this.character.getHeadHeight();
       pos.y = THREE.MathUtils.damp(pos.y, surface, 14, dt);
       this.verticalVelocity = 0;
       this.grounded = false;
     } else if (this.flying) {
       const up = rooted ? 0 : Number(this.keys.has('Space')) - Number(this.keys.has('ControlLeft') || this.keys.has('ControlRight'));
-      const desiredY = up * (sprint ? 11 : 7.5)*this.stats.flight;
+      const desiredY = up * (tryingSprint ? 11 : 7.5)*this.stats.flight;
       this.verticalVelocity = THREE.MathUtils.damp(this.verticalVelocity, desiredY, 6, dt);
-      pos.y = Math.max(ground + 1.2, pos.y + this.verticalVelocity * dt);
-      this.grounded = false;
+      pos.y = THREE.MathUtils.clamp(pos.y + this.verticalVelocity * dt,ground+.18,90);
+      if(up<0&&pos.y<=ground+.3){this.flying=false;this.grounded=true;pos.y=ground;this.verticalVelocity=0;this.sound.play('land');}
+      this.grounded = !this.flying;
     } else if (this.grounded) {
       const downwardGap = pos.y - ground;
       if (downwardGap > 0.7) {
@@ -785,19 +917,23 @@ export class Game {
       this.verticalVelocity -= GRAVITY * dt;
       pos.y += this.verticalVelocity * dt;
       if (pos.y <= ground) {
+        if(this.verticalVelocity < -3)this.sound.play('land');
         pos.y = ground;
         this.grounded = true;
         this.verticalVelocity = 0;
       }
     }
     const move = this.horizontalVelocity.length();
+    const oldYaw=this.character.root.rotation.y;
+    if(this.lastMove>2&&move<2&&this.flying)this.brakingUntil=this.elapsed+.45;
+    this.lastMove=move;
     if (rooted || (this.viewMode === 'first' && this.heroReady)) this.character.root.rotation.y = this.yaw;
     else if (move > 0.25 && this.elapsed >= this.attackEnd) {
       const angle = Math.atan2(-this.horizontalVelocity.x, -this.horizontalVelocity.z);
       this.character.root.rotation.y = smoothAngle(this.character.root.rotation.y, angle, Math.min(1, dt * 13));
     }
-    const flightPhase = !this.flying ? 'ground' : this.elapsed - this.flyingSince < 0.65 ? 'takeoff' : this.elapsed - this.flyingSince > 2.4 ? 'cruise' : 'hover';
-    this.character.animate(dt, move, !this.grounded && !swimming, this.elapsed < this.attackEnd, this.flying, sprint, flightPhase, this.heldSkill ?? this.activeSkill, swimming, Boolean(this.heldSkill || this.kiBlastHeld || this.powerSurge));
+    const flightPhase = !this.flying ? 'ground' : this.elapsed - this.flyingSince < 0.65 ? 'takeoff' : this.elapsed<this.brakingUntil?'brake':move>2?'cruise':'hover';
+    this.character.animate(dt, move, !this.grounded && !swimming, this.elapsed < this.attackEnd, this.flying, sprint, flightPhase, this.heldSkill ?? this.activeSkill, swimming, Boolean(this.heldSkill || this.kiBlastHeld || this.powerSurge),Math.atan2(Math.sin(this.character.root.rotation.y-oldYaw),Math.cos(this.character.root.rotation.y-oldYaw))*3,this.verticalVelocity);
   }
 
   private updateCamera(dt: number): void {
@@ -812,17 +948,17 @@ export class Game {
     }
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const desired = eyesReady
-      ? eye.addScaledVector(forward, 0.12)
+      ? head.clone().lerp(eye,this.motion*.35).addScaledVector(forward, .19)
       : this.viewMode === 'first'
       ? head.clone().addScaledVector(forward, 0.19)
       : head.clone().addScaledVector(forward, -5.8).addScaledVector(right, 0.85).add(new THREE.Vector3(0, 0.55, 0));
-    if (this.viewMode === 'third') desired.y = Math.max(this.world.height(desired.x, desired.z) + 1.25, desired.y);
+    if(this.viewMode==='third'){const safe=resolveCamera(this.world,head,desired);desired.copy(safe);if(this.camera.position.distanceTo(head)>safe.distanceTo(head))this.camera.position.copy(safe);}
     this.camera.position.lerp(desired, 1 - Math.exp(-dt * (eyesReady ? 22 : 16)));
     this.camera.lookAt(this.camera.position.clone().addScaledVector(forward, 25));
     const first = this.viewMode === 'first' && this.state === 'PLAYING';
     this.character.setFirstPerson(first && this.heroReady);
     this.character.root.visible = this.state === 'PLAYING' && (this.viewMode === 'third' || this.heroReady);
-    this.firstPersonArms.visible = first && !this.heroReady;
+    this.firstPersonArms.visible = first;
   }
 
   private buildFirstPersonHands(): void {
@@ -898,6 +1034,6 @@ export class Game {
   }
 
   private debugState(): object {
-    return { state: this.state, heroReady: this.heroReady, hero: this.activeProfile?.name, charging: this.heldSkill, race: this.raceId, stats: { ...this.stats }, position: this.character.root.position.toArray(), speed: this.horizontalVelocity.length(), ground: this.grounded, flying: this.flying, mode: this.viewMode, activeSkill: this.activeSkill, dummyHealth: this.dummy.health, beams: this.combat.activeCount, breakables: this.world.breakableCount };
+    return { state: this.state, heroReady: this.heroReady, hero: this.activeProfile?.name, charging: this.heldSkill, race: this.raceId, stats: { ...this.stats }, position: this.character.root.position.toArray(), speed: this.horizontalVelocity.length(), ground: this.grounded, flying: this.flying, mode: this.viewMode, activeSkill: this.activeSkill, dummyHealth: this.dummy.health, beams: this.combat.activeCount, breakables: this.world.breakableCount, progress:this.activeProfile?.progress, biome:biomeAt(this.character.root.position.x,this.character.root.position.z), wildlife:this.wildlife.debug(), render:this.renderer.info.render, quality:this.quality, animation:this.character.debugAnimation() };
   }
 }

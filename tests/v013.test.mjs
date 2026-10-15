@@ -1,60 +1,14 @@
-import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = file => readFileSync(join(root, file), 'utf8');
-
- test('animacoes reais carregam pelo AnimationMixer com transicoes e sem alterar bones manualmente', () => {
-  const text = source('src/characters/Character.ts');
-  assert.match(text, /new THREE\.AnimationMixer\(model\)/);
-  assert.match(text, /fadeOut\(fade\)/);
-  assert.match(text, /fadeIn\(fade\)/);
-  assert.match(text, /this\.mixer\.update\(Math\.min\(dt, \.05\)\)/);
-  assert.doesNotMatch(text, /externalBones/);
-  assert.match(text, /split\('\|'\)\.pop\(\)/);
-});
-
- test('modelo humanoide rigado esta local no ZIP e dispensa download', () => {
-  assert.match(source('JOGAR.bat'), /Superhero_Male_FullBody\.gltf/);
-  assert.match(source('src/characters/Character.ts'), /loadAsync\('\/models\/hero\/Superhero_Male_FullBody\.gltf'\)/);
-  assert.ok(existsSync(join(root, 'public/models/origens-warrior.glb')));
-});
-
- test('caminhada usa altura da mesma malha triangulada, com gravidade na descida', () => {
-  const world = source('src/world/World.ts');
-  const game = source('src/core/Game.ts');
-  assert.match(world, /private rawHeight\(/);
-  assert.match(world, /const step = width \/ 150/);
-  assert.match(world, /u \+ v <= 1/);
-  assert.match(world, /const y = this\.rawHeight\(x, z\)/);
-  assert.match(game, /const ground = this\.world\.height\(pos\.x, pos\.z\);/);
-  assert.match(game, /if \(downwardGap > 0\.7\)/);
-  assert.match(game, /this\.verticalVelocity -= GRAVITY \* dt/);
-});
-
- test('scroll alterna habilidades sem remover os atalhos 1 a 4', () => {
-  const game = source('src/core/Game.ts');
-  assert.match(game, /addEventListener\('wheel'/);
-  assert.match(game, /passive: false/);
-  assert.match(game, /this\.selectSkill\(SKILLS\[\(index \+ direction/);
-  assert.match(game, /\^Digit\[1-4\]\$/);
-});
-
- test('primeira pessoa apresenta maos e energia animada e ataque usa origem da camera', () => {
-  const game = source('src/core/Game.ts');
-  assert.match(game, /this\.scene\.add\(this\.camera\)/);
-  assert.match(game, /this\.camera\.add\(this\.firstPersonArms\)/);
-  assert.match(game, /this\.fpEnergy\.visible = this\.viewMode/);
-  assert.match(game, /this\.viewMode === 'first'\s*\?/);
-});
-
- test('HUD e interface apresentam selecao pelo scroll e marca de versao atual', () => {
-  const html = source('index.html');
-  assert.match(html, /SCROLL/);
-  assert.match(html, /0\.1\.13/);
-  assert.match(source('src/ui/Ui.ts'), /highlightSkill/);
-  assert.ok(existsSync(join(root, 'JOGAR.bat')));
-});
+import {readFileSync} from 'node:fs';
+import {load} from './load-ts.mjs';
+const land=await load('src/world/landscape.ts');
+test('water footprint ends cleanly before and after the river',()=>{for(const z of [-80,-63,60,80])assert.equal(land.waterFootprint(land.riverCenter(z),z),false);});
+test('lake has a stable level across its basin',()=>{for(let z=15;z<56;z+=.5)assert.equal(land.waterLevel(z),.4);});
+test('river surface descends continuously toward the lake',()=>{let last=Infinity;for(let z=-62;z<59;z+=.25){const y=land.waterLevel(z);assert.ok(y<=last+1e-8);last=y;}});
+test('rendered terrain cannot pierce the interior of the water',()=>{let count=0;for(let z=-51;z<49;z+=.7)for(let u=-.82;u<=.82;u+=.12){const x=land.riverCenter(z)+land.riverWidth(z)*u;assert.ok(land.terrainHeight(x,z)<land.waterLevel(z),`${x},${z}`);count++;}assert.ok(count>1500);});
+test('swimming depends on water coverage and depth, not a painted terrain colour',()=>{assert.equal(land.isSwimming(land.riverCenter(30),30),true);assert.equal(land.isSwimming(0,0),false);assert.equal(land.waterDepth(-110,0),0);});
+test('physics matches each vertex of the rendered terrain grid',()=>{const step=land.TERRAIN_WIDTH/land.TERRAIN_SEGMENTS;for(let i=0;i<=land.TERRAIN_SEGMENTS;i+=7)for(let j=0;j<=land.TERRAIN_SEGMENTS;j+=9){const x=-land.TERRAIN_WIDTH/2+i*step,z=land.TERRAIN_WIDTH/2-j*step;assert.ok(Math.abs(land.terrainHeight(x,z)-land.rawHeight(x,z))<1e-7);}});
+test('biomes blend continuously and weights remain normalized',()=>{for(let x=-160;x<160;x+=4)for(let z=-160;z<160;z+=8){const w=land.biomeWeights(x,z);assert.ok(Math.abs(w.plains+w.desert+w.snow-1)<1e-9);for(const v of Object.values(w))assert.ok(v>=0&&v<=1);}assert.equal(land.biomeAt(-120,0),'desert');assert.equal(land.biomeAt(43,124),'snow');assert.equal(land.biomeAt(0,0),'plains');});
+test('all sanctuary spawn points are dry and inside world limits',()=>{for(const p of land.LANDMARKS.filter(p=>p.id!=='lake')){assert.equal(land.waterDepth(p.x,p.z+9),0);assert.ok(Math.abs(p.x)<land.WORLD_HALF-4&&Math.abs(p.z+9)<land.WORLD_HALF-4);}});
+test('displayed version matches the package release',()=>{const pkg=JSON.parse(readFileSync('package.json'));const html=readFileSync('index.html','utf8');assert.ok(html.includes(`v${pkg.version}`));});

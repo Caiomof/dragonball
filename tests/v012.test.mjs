@@ -1,49 +1,11 @@
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-
-const project = process.cwd();
-const read = path => readFileSync(join(project, path), 'utf8');
-const skills = JSON.parse(read('src/data/skills.json'));
-const html = read('index.html');
-const game = read('src/core/Game.ts');
-const world = read('src/world/World.ts');
-
-test('quatro poderes com entradas e custos exclusivos', () => {
-  assert.equal(skills.length, 4);
-  assert.deepEqual(skills.map(skill => skill.key), ['1', '2', '3', '4']);
-  assert.equal(new Set(skills.map(skill => skill.id)).size, 4);
-  for (const skill of skills) {
-    assert.ok(skill.damage > 0 && skill.kiCost > 0 && skill.cooldown > 0);
-    assert.ok(['beam','disc'].includes(skill.kind));
-  }
-});
-
-test('interface da v0.1.2 tem painéis, hotbar, mira e controle da câmera', () => {
-  for (const id of ['settings-screen','skills-screen','skill-hotbar','aim-reticle','camera-third','camera-first','fov-slider','mouse-slider','attribute-editor','flight-indicator']) {
-    assert.ok(html.includes(`id="${id}"`), `Elemento ${id} ausente`);
-  }
-});
-
-test('movimentação e ataque fazem leitura da câmera e toggle de voo', () => {
-  assert.match(game, /lastSpaceAt/);
-  assert.match(game, /this\.flying = !this\.flying/);
-  assert.match(game, /this\.world\.trace\(this\.camera\.position/);
-  assert.match(game, /this\.viewMode === 'first'/);
-  assert.match(game, /this\.world\.damage\(/);
-});
-
-test('árvores, rochas e ruínas possuem ciclo de dano e regeneração', () => {
-  assert.match(world, /respawnSeconds = 120/);
-  assert.match(world, /damage\(id: number/);
-  assert.match(world, /entry\.health = entry\.maxHealth/);
-  assert.match(world, /part\.mesh\.setMatrixAt/);
-});
-
-test('inicializador e modelo offline incluido possuem documentação', () => {
-  assert.ok(existsSync(join(project, 'JOGAR.bat')));
-  assert.ok(existsSync(join(project, 'public/models/LEIA-MODELO.txt')));
-  assert.ok(existsSync(join(project, 'public/models/origens-warrior.glb')));
-  assert.match(read('JOGAR.bat'), /Superhero_Male_FullBody\.gltf/);
-});
+import {load} from './load-ts.mjs';
+const game=await load('src/data/gameConfig.ts');
+const rules=await load('src/systems/combatRules.ts');
+test('ki cannot be spent when insufficient, and successful spending is exact',()=>{const stats=game.createStats(game.RACES[0]);stats.ki=6;assert.equal(game.spendKi(stats,7),false);assert.equal(stats.ki,6);assert.equal(game.spendKi(stats,6),true);assert.equal(stats.ki,0);});
+test('damage never heals or produces negative health',()=>{assert.equal(game.applyDamage(10,-3),10);assert.equal(game.applyDamage(10,30),0);});
+test('all races produce independently mutable combat stats',()=>{for(const race of game.RACES){const a=game.createStats(race),b=game.createStats(race);a.health=0;assert.ok(b.health>0);assert.ok(b.maxKi>0);}});
+test('animals face their displacement in all quadrants',()=>{for(const [x,z] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-2,3]]){const angle=rules.headingForVelocity(x,z);assert.ok(Math.abs(Math.sin(angle)-x/Math.hypot(x,z))<1e-8);assert.ok(Math.abs(Math.cos(angle)-z/Math.hypot(x,z))<1e-8);}});
+test('turn smoothing takes the short path across the angle boundary',()=>{const result=rules.turnToward(Math.PI-.01,-Math.PI+.01,.05);assert.ok(result>Math.PI-.01&&result<Math.PI+.01);});
+test('wolves cannot bite a flying player or through scenery',()=>{assert.equal(rules.biteCanReach(1,5,true),false);assert.equal(rules.biteCanReach(1,0,false),false);assert.equal(rules.biteCanReach(3,0,true),false);assert.equal(rules.biteCanReach(1,.3,true),true);});

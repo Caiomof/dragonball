@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a202b" />
     <meta name="description" content="Dragon Ball RPG: Origens — um protótipo de aventura 3D estilizada." />
-    <title>Dragon Ball RPG — Origens · v0.1.14</title>
+    <title>Dragon Ball RPG — Origens · v0.2.0</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
@@ -15,7 +15,7 @@
     <div id="ui-root">
       <header class="topline" id="topline">
         <div class="brand-mark"><span class="brand-icon">✦</span><span>DRAGON BALL <b>RPG</b></span></div>
-        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.1.14</span>
+        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.2.0</span>
         <button id="sound-toggle" class="sound-toggle" type="button" aria-label="Alternar áudio">♫ <span>SOM ON</span></button>
       </header>
 
@@ -64,19 +64,19 @@
               <label>CABELO <select id="hero-hair"><option value="0">Espetado</option><option value="1">Curto</option><option value="2">Volumoso</option></select></label>
               <label>BARBA <select id="hero-beard-style"><option value="0">Nenhuma</option><option value="1">Curta</option><option value="2">Cavanhaque</option><option value="3">Cheia</option></select></label>
               <label class="hidden">BARBA <input id="hero-beard" type="checkbox" /></label>
-              <label class="hidden">OLHOS <input id="hero-eye" type="color" value="#45b4e9" /></label>
-              <label class="hidden">CABELO/COR <input id="hero-haircolor" type="color" value="#202436" /></label>
+              <label>OLHOS <input id="hero-eye" type="color" value="#45b4e9" /></label>
+              <label>CABELO/COR <input id="hero-haircolor" type="color" value="#202436" /></label>
             </div>
             <p class="creator-tip">Olhos e cabelo ficam perto da cor natural da raça.</p>
             <div id="eye-swatches" class="swatches"></div>
             <div id="hair-swatches" class="swatches"></div>
           </div>
-          <div class="creator-nav">
+          <div class="preview-controls"><label>GIRAR <input id="preview-rotate" type="range" min="-180" max="180" value="0" /></label><label>APROXIMAR <input id="preview-zoom" type="range" min="75" max="145" value="100" /></label></div><div class="creator-nav">
             <button id="creator-next" class="button button-primary" type="button">CONTINUAR →</button>
             <button id="race-confirm" class="button button-primary race-confirm hidden" type="button">SALVAR E JOGAR <span class="button-arrow">→</span></button>
           </div>
         </div>
-        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D ANIMADO · VISUAL V0.1.14</span></div>
+        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D ANIMADO · VISUAL V0.2.0</span></div>
         <div class="race-stats-panel"><span>ATRIBUTOS INICIAIS</span><div id="race-stat-rows"></div></div>
       </section>
 
@@ -89,18 +89,18 @@
           <div class="resource"><div class="resource-label"><span><b class="dot ki-dot"></b> ENERGIA KI</span><strong id="hud-ki-label">120 / 120</strong></div><div class="resource-track"><div class="resource-fill ki-fill" id="hud-ki-fill"></div></div></div>
           <div class="resource"><div class="resource-label"><span><b class="dot stamina-dot"></b> STAMINA</span><strong id="hud-stamina-label">100 / 100</strong></div><div class="resource-track"><div class="resource-fill stamina-fill" id="hud-stamina-fill"></div></div></div>
         </div>
-        <div class="world-label"><span class="world-glyph">◇</span><div><span>REGIÃO INICIAL</span><strong>PLANÍCIE ESMERALDA</strong></div><small>FIM DE TARDE · 17:42</small></div>
-        <div class="reticle" id="aim-reticle"><span></span><span></span><span></span><span></span><b></b></div>
+        <div class="world-label"><span class="world-glyph">◇</span><div><span>REGIÃO</span><strong id="region-name">PLANÍCIE ESMERALDA</strong></div><small id="region-surface">CAMPO · EXPLORAÇÃO</small></div>
+        <aside id="journey-panel" class="journey-panel"><span id="journey-count" class="eyebrow">JORNADA · 1 / 6</span><strong id="journey-title"></strong><p id="journey-hint"></p><div id="journey-direction"></div><progress id="journey-progress" max="6" value="0" aria-label="Progresso da jornada"></progress></aside><div class="reticle" id="aim-reticle"><span></span><span></span><span></span><span></span><b></b></div>
         <div id="target-indicator" class="target-indicator hidden"><span class="target-name">◈ TOTEM DE TREINAMENTO</span><div class="target-bar"><div id="target-health-fill"></div></div><small id="target-health-label">100 / 100</small></div>
         <div id="charge-ui" class="charge-ui hidden"><span id="charge-label">CARREGANDO KI</span><div class="charge-track"><i id="charge-fill"></i></div><small id="charge-power">1.0×</small></div>
         <div class="skill-hotbar" id="skill-hotbar" aria-label="Barra de poderes"></div><div class="flight-indicator hidden" id="flight-indicator">✦ VOO GASTA KI · CORRER GASTA STAMINA</div>
         <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner">✦</div></div><div class="ability-copy"><span>HABILIDADE ESPECIAL</span><strong>KAMEHAMEHA</strong><small id="ability-status">SEGURE 1–4 · SOLTE PARA DISPARAR</small></div><span class="ability-key">1–4</span></div>
-        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.1.14</div>
+        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.2.0</div>
         <div id="toast" class="toast hidden" role="status"></div>
         <div id="combat-number-layer"></div>
       </section>
 
-      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">PAUSA</div><h2>JOGO <em>PAUSADO</em></h2><p>A jornada espera por você.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR</button><button id="open-settings" class="button button-subtle" type="button">CONFIGURAÇÕES</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
+      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">PAUSA</div><h2>JOGO <em>PAUSADO</em></h2><p>Seu progresso está salvo neste navegador.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR</button><button id="open-skills" type="button" class="button button-subtle">LABORATÓRIO DE ATRIBUTOS</button><button id="open-settings" class="button button-subtle" type="button">CONFIGURAÇÕES</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
       <section id="settings-screen" class="screen panel-screen hidden" aria-label="Configurações do jogo">
         <div class="panel-card"><div class="eyebrow">AJUSTE SUA EXPERIÊNCIA</div><h2>CONFIGURAÇÕES</h2>
         <div class="settings-tabs"><button type="button" data-settings-tab="camera" class="selected">CÂMERA</button><button type="button" data-settings-tab="controls">CONTROLES</button><button type="button" data-settings-tab="audio">ÁUDIO</button></div>
@@ -109,10 +109,10 @@
           <label class="panel-label" for="fov-slider">CAMPO DE VISÃO <strong id="fov-value">70°</strong></label><input id="fov-slider" type="range" min="55" max="105" step="1" value="70"/>
           <label class="panel-label" for="mouse-slider">SENSIBILIDADE DO MOUSE <strong id="mouse-value">100%</strong></label><input id="mouse-slider" type="range" min="45" max="190" step="5" value="100"/>
         </div>
-        <div data-settings-panel="controls" class="hidden control-list">
+        <div class="settings-extra"><label>QUALIDADE <select id="quality-select"><option value="low">Leve</option><option value="medium" selected>Equilibrada</option><option value="high">Alta</option></select></label><label>MOVIMENTO DA CÂMERA <input id="motion-slider" type="range" min="0" max="100" value="65" /></label><label>VOLUME <input id="volume-slider" type="range" min="0" max="100" value="65" /></label></div><div data-settings-panel="controls" class="hidden control-list">
           <p><b>WASD</b> mover · <b>Shift</b> correr (stamina) · <b>Espaço</b> pular · <b>Espaço duas vezes</b> voar (ki)</p>
           <p><b>Mouse</b> câmera · <b>M1</b> soco · <b>M2</b> bola de ki (segure para crescer)</p>
-          <p><b>1–4</b> carregar poder · <b>X</b> maximizar aura · <b>K</b> atributos · <b>SCROLL</b> alterna poder · <b>V</b> visão · <b>Esc</b> pausa</p>
+          <p><b>1–4</b> carregar poder · <b>X</b> concentrar e recuperar Ki · <b>K</b> atributos · <b>SCROLL</b> alterna poder · <b>V</b> visão · <b>Esc</b> pausa</p>
         </div>
         <div data-settings-panel="audio" class="hidden"><p>O som ambiente e os efeitos da luta podem ser ligados ou desligados.</p><button id="sound-settings" type="button" class="button button-subtle">ALTERNAR SOM</button></div>
         <button id="settings-close" type="button" class="button button-primary">VOLTAR</button></div>
@@ -124,7 +124,7 @@
         <p class="skill-note">✦ Laboratório de evolução: clique em − ou + para testar combinações e volte ao mapa com K.</p>
         <button id="skills-close" type="button" class="button button-primary">VOLTAR AO JOGO →</button></div>
       </section>
-      <div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.1.14</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Escolha uma das quatro raças, explore a Planície Esmeralda e teste seu Kamehameha no Totem de Treinamento.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
+      <section id="defeat-screen" class="screen panel-screen hidden"><div class="panel-card"><div class="eyebrow">UM NOVO FÔLEGO</div><h2>O TREINO <em>CONTINUA.</em></h2><p>Você caiu em combate. Sua jornada e aparência foram preservadas.</p><button id="respawn-button" class="button button-primary" type="button">VOLTAR AO ÚLTIMO SANTUÁRIO</button></div></section><div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.2.0</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Crie seu guerreiro, domine os poderes e explore a Planície Esmeralda, as Dunas do Sol e a Serra da Aurora.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

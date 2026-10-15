@@ -1,62 +1,14 @@
-import assert from 'node:assert/strict';
-import {readFileSync,statSync} from 'node:fs';
-import {join,dirname} from 'node:path';
-import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-const root=join(dirname(fileURLToPath(import.meta.url)),'..');
-const read=p=>readFileSync(join(root,p),'utf8');
-const game=read('src/core/Game.ts');const avatar=read('src/characters/Character.ts');const html=read('index.html');
-const model=readFileSync(join(root,'public/models/origens-warrior.glb'));
-function glbJson(){assert.equal(model.toString('ascii',0,4),'glTF');assert.equal(model.readUInt32LE(4),2);assert.equal(model.readUInt32LE(8),model.length);assert.equal(model.toString('ascii',16,20),'JSON');return JSON.parse(model.subarray(20,20+model.readUInt32LE(12)).toString());}
-
-test('modelo tridimensional rigado e embarcado (sem fallback de rede)',()=>{
-  assert.ok(statSync(join(root,'public/models/origens-warrior.glb')).size>100000);
-  const asset=glbJson();
-  assert.ok(asset.nodes.length>60);
-  assert.ok(asset.meshes.length>50);
-  for(const name of ['Idle','Walk','Run','Jump','Flight','Punch','Charge']) assert.ok(asset.animations.some(a=>a.name===name), name);
-  for(const clip of asset.animations){
-    assert.ok(clip.channels.length>=8,`animacao curta: ${clip.name}`);
-    const destinations=clip.channels.map(c=>`${c.target.node}/${c.target.path}`);
-    assert.equal(new Set(destinations).size,destinations.length,`canais duplicados: ${clip.name}`);
-    for(const c of clip.channels)assert.ok(c.target.node<asset.nodes.length);
-  }
-});
-
-test('animacoes de locomocao isoladas da velocidade de gameplay',()=>{
-  assert.match(avatar,/const rate = sprint \? 9\.5 : 6\.2/);
-  assert.match(avatar,/this\.mixer\.update\(Math\.min\(dt, \.05\)\)/);
-  assert.doesNotMatch(avatar,/strideFrequency = .*speed/);
-  assert.match(avatar,/AnimationMixer/);
-});
-
-test('perfis distintos com persistencia no localStorage e aparencia configuravel',()=>{
-  const profiles=read('src/data/profiles.ts');
-  assert.match(profiles,/localStorage\.setItem/);
-  assert.match(profiles,/localStorage\.getItem/);
-  for(const id of ['character-screen','character-list','character-create','hero-name','hero-height','hero-build','hero-beard','hero-hair','hero-eye','hero-haircolor'])assert.ok(html.includes(`id="${id}"`),id);
-  assert.match(game,/saveProfiles\(this\.profiles\)/);
-  assert.match(avatar,/setAppearance\(value: Appearance\)/);
-});
-
-test('combate com M1 combo, M2 orb e 1-4 carregamento real',()=>{
-  assert.match(game,/event\.button === 0\) this\.punch\(\)/);
-  assert.match(game,/event\.button === 2\) this\.beginKiBlast\(\)/);
-  assert.match(game,/releaseKiBlast/);
-  assert.match(game,/beginCharge\(skill\.id\)/);
-  assert.match(game,/this\.releaseCharge\(\)/);
-  assert.match(game,/this\.comboStep=/);
-  assert.match(game,/spec\.kiCost\+Math\.ceil\(held\*10\)/);
-  assert.match(read('src/combat/Combat.ts'),/style\.style === 'orb'/);
-});
-
-test('laboratorio de atributos gratis, Ki regen e stamina funcionam por valores',()=>{
-  const p=read('src/data/profiles.ts');
-  for(const attr of ['health','ki','stamina','power','kiRegen','speed','flight'])assert.match(p,new RegExp(`id:'${attr}'`));
-  assert.match(game,/this\.stats\.stamina-=7/);
-  assert.match(game,/this\.stats\.stamina\+22\*dt/);
-  assert.match(game,/this\.stats\.kiRegen/);
-  assert.match(game,/\*this\.stats\.speed/);
-  assert.match(game,/\*this\.stats\.flight/);
-  for(const id of ['hud-stamina-fill','hud-stamina-label','attribute-editor','charge-ui'])assert.ok(html.includes(`id="${id}"`),id);
-});
+import assert from 'node:assert/strict';
+import {load} from './load-ts.mjs';
+const profiles=await load('src/data/profiles.ts');
+const journey=await load('src/systems/Journey.ts');
+test('legacy profiles migrate without losing identity, race or appearance',()=>{const p=profiles.normalizeProfile({id:'old_123',name:'Vegeta',race:'saiyajin',appearance:{hair:2,beard:true,hairColor:'#987654'},attributes:{power:15}});assert.equal(p.name,'Vegeta');assert.equal(p.schemaVersion,2);assert.equal(p.appearance.beardStyle,1);assert.equal(p.appearance.hair,2);assert.equal(p.attributes.power,15);assert.equal(p.progress.training,0);});
+test('corrupt numeric values and invalid colors cannot enter the simulation',()=>{const p=profiles.normalizeProfile({id:'safe',race:'majin',appearance:{height:Infinity,build:-50,hairColor:'url(bad)'},attributes:{speed:NaN,flight:1e10}});assert.ok(Number.isFinite(p.appearance.height));assert.equal(p.appearance.build,.9);assert.match(p.appearance.hairColor,/^#[0-9a-f]{6}$/);assert.equal(p.attributes.speed,1);assert.equal(p.attributes.flight,2.5);});
+test('invalid identities and unknown races are rejected',()=>{assert.equal(profiles.normalizeProfile({id:'<script>',race:'majin'}),null);assert.equal(profiles.normalizeProfile({id:'a',race:'unknown'}),null);assert.equal(profiles.normalizeProfile(null),null);});
+test('profile defaults are independent',()=>{const a=profiles.makeProfile(),b=profiles.makeProfile();a.progress.training=3;a.appearance.hair=2;assert.equal(b.progress.training,0);assert.notEqual(b.appearance.hair,2);});
+test('storage roundtrip retains progress, checkpoint and appearance',()=>{let saved='';globalThis.localStorage={setItem:(_,v)=>saved=v,getItem:()=>saved};const a=profiles.makeProfile('terraqueo');a.progress.desert=true;a.checkpoint='desert';a.appearance.beardStyle=3;assert.equal(profiles.saveProfiles([a]),true);const [b]=profiles.loadProfiles();assert.equal(b.id,a.id);assert.equal(b.checkpoint,'desert');assert.equal(b.appearance.beardStyle,3);assert.equal(b.progress.desert,true);});
+test('storage failure is reported without deleting the previous record',()=>{let previous='old';globalThis.localStorage={setItem:()=>{throw new Error('Quota exceeded');},getItem:()=>previous};assert.equal(profiles.saveProfiles([profiles.makeProfile()]),false);assert.equal(previous,'old');});
+test('duplicate saved identities are not loaded twice',()=>{const p=profiles.makeProfile();globalThis.localStorage={getItem:()=>JSON.stringify([p,p])};assert.equal(profiles.loadProfiles().length,1);});
+test('journey requires training before flight and exploration count',()=>{const p=journey.newJourney();journey.advanceJourney(p,10,-119,-24,true,true);assert.equal(journey.journeyStage(p),0);assert.equal(p.flight,0);assert.equal(p.desert,false);});
+test('journey progresses through all six playable stages',()=>{const p=journey.newJourney();p.training=3;assert.equal(journey.journeyStage(p),1);assert.ok(journey.advanceJourney(p,6,0,0,true,false));assert.equal(journey.journeyStage(p),2);journey.advanceJourney(p,4,31,30,false,true);assert.equal(journey.journeyStage(p),3);journey.advanceJourney(p,.01,-119,-24,false,false);assert.equal(journey.journeyStage(p),4);journey.advanceJourney(p,.01,43,124,false,false);assert.equal(journey.journeyStage(p),5);p.final=true;assert.equal(journey.journeyStage(p),6);});

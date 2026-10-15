@@ -1,17 +1,44 @@
-# Roteiro de teste manual — v0.1.6
+# Avaliação manual — 0.2.0
 
-1. Executar `JOGAR.bat`. Confirmar abertura do endereço local e ausência de erro na tela; se houver, inspecionar console do navegador (`F12`).
-2. **Começar jornada** → **Criar novo guerreiro**. Escolher raça, nome, altura, porte físico, olhos/cabelo/barba. Inspecionar a prévia 3D em diferentes estilos.
-3. **Salvar e jogar**. Verificar se o avatar correto surge, se os pés ficam no chão e se é possível andar **para cima e para baixo** em colinas.
-4. Andar normalmente por 10 segundos. Correr segurando Shift por 10 segundos. As animações devem manter um ritmo proporcional a *andar x correr*, sem acelerar freneticamente se o atributo de velocidade aumentar.
-5. Com a mira em um alvo próximo, clicar com o esquerdo três vezes em intervalos menores que 0,85s. Conferir combos, gasto de stamina e dano.
-6. Usar clique direito: bola de Ki e gasto de 6 Ki.
-7. Pressionar e soltar `1` rapidamente: Kamehameha básico. Depois manter `1` pressionado por 2 segundos: feixe maior, mais dano, mais gasto de Ki.
-8. Conferir as técnicas `2`, `3`, `4` da mesma forma. Scroll continua destacando o poder na hotbar.
-9. Pressionar `K` para evoluir Ki, regeneração de Ki, stamina, vida, poder, velocidade terrestre e voo via botões **+ e −**. Voltar ao mapa e testar efeito imediatamente.
-10. Dar dois toques em Espaço para voar. Testar subida com Espaço, descida com Ctrl e modificação do atributo de voo.
-11. Pressionar `V` para câmera em primeira pessoa; inspecionar movimentos dos braços durante socos e ataques.
-12. Voltar ao menu, criar um segundo personagem, editar um antigo e conferir sua evolução. Recarregar a página e confirmar que os perfis continuam salvos.
-13. Destruir um objeto ambiental. Conferir que renasce após dois minutos.
+Execute `npm ci`, `npm run check` e `npm run dev`; no Windows, use também `JOGAR.bat`. Faça a avaliação no navegador e GPU de destino. Este roteiro complementa os testes automatizados e não deve ser marcado como executado apenas porque o build passou.
 
-**Limite conhecido:** a v0.1.6 foi validada estruturalmente e pela importação do GLB, mas a execução WebGL no Chrome/Edge não pôde ser automatizada no ambiente gerador por falta de acesso às dependências npm. Este roteiro confirma as interações visuais.
+## Personagem e câmera
+
+1. Crie um personagem de cada raça. Confira três cabelos e as opções sem barba, curta, cavanhaque e cheia nos humanos; confira antenas/orelhas e apêndice nas outras raças. Gire a prévia, aproxime, altere cores e proporções.
+2. Salve, volte ao menu e edite um personagem existente. Nome, aparência, atributos e progresso devem continuar independentes dos outros perfis.
+3. Ande, corra, pare, mude de direção, pule e aterrisse. Observe pés, contato com o solo e transições, incluindo encostas e margens.
+4. Toque Espaço duas vezes; suba, flutue, acelere, faça curvas, freie e desça com Ctrl. Confira a postura de lado e por trás, transição para o solo, colisões, altura máxima e queda por falta de Ki.
+5. Em terceira pessoa, aproxime a câmera de rochas, troncos e encostas. Alterne V, mire e ataque em primeira pessoa; verifique mãos, horizonte e ausência da cabeça bloqueando a visão.
+
+## Técnicas, animais e derrota
+
+1. No totem, execute três socos, incluindo o combo. O dano deve ocorrer no impacto; nenhum golpe deve acertar um alvo distante ou atrás de obstáculo.
+2. Segure/solte 1–4 em solo e no ar. Observe as quatro poses, origem nas mãos, liberação, cooldown e consumo. Teste falta de Ki e rajada pelo botão direito.
+3. Segure X em solo. Confira a postura, recuperação de Ki, gasto de stamina e áudio. Pause durante a carga: ao voltar, a técnica não deve disparar sozinha.
+4. Observe lobo e cervo de perfil: a cabeça deve apontar para o movimento, a curva deve ser gradual e a cadência deve acompanhar a velocidade. Aproxime-se, afaste-se e provoque reação com golpe.
+5. Observe antecipação de mordida, reação ao impacto, queda e reaparecimento. Voe acima do lobo ou coloque uma rocha entre ele e o jogador; não deve haver mordida atravessando o cenário ou alcançando grande altura.
+6. Deixe o lobo esgotar a vida. A tela de derrota deve interromper o jogo; o botão deve restaurar o jogador no último santuário com recursos e progresso preservados.
+
+## Água e mundo
+
+1. Siga o rio do início ao lago, andando nas duas margens. Procure solo exposto no meio da água, descontinuidades, buracos escuros e degraus entre superfícies.
+2. Entre e saia da água por diversos ângulos. Confira a passagem de caminhar para nadar, cabeça acima da superfície, nado parado/em movimento e ondas de contato. O lago deve permanecer nivelado.
+3. Complete o objetivo de voo e natação. Percorra de fato o caminho da planície ao deserto e depois à neve, sem ferramentas de realocação. Confira limites do mapa, obstáculos, transições e orientação do HUD.
+4. Visite os dois santuários. Não deve haver rochas bloqueando o centro ou checkpoint. Confirme vegetação e cores de cada bioma.
+5. No guardião, espere o círculo laranja: saia da área ou voe para escapar da onda. Ficar no chão dentro do círculo deve causar dano. Derrote-o e verifique o encerramento da jornada.
+
+## Configurações, estabilidade e desempenho
+
+1. Abra K/O e feche pela mesma tecla, pelo botão ou Esc. Pause perto de um animal e com uma técnica ativa; inimigos, recursos, projéteis, objetivos e timers devem parar.
+2. Troque de aba ou retire o foco durante combate. Ao voltar, confira pausa e ausência de teclas presas.
+3. Compare qualidade baixa/média/alta, volume desligado/baixo/alto e redução de movimento. Recarregue e confirme persistência.
+4. Recarregue depois de cada santuário. Confira checkpoint, atributos, aparência e etapas. Teste também um perfil anterior à versão 0.2.0.
+5. Faça uma sessão de 15 minutos com viagens, edições e técnicas repetidas. Observe F3 e o gerenciador do navegador. Registre resolução, GPU, navegador, qualidade, FPS típico e quedas de desempenho; não compare números de SwiftShader com uma GPU real.
+6. Confira resolução de 960×720, 1366×768 e 1920×1080, incluindo editor e painéis. O jogo requer teclado/mouse; não há controles móveis.
+7. Ouça passos em terra/areia/neve/água, impactos, carga e ambiente. Verifique volume sem estalos e silêncio ao pausar/desativar som.
+
+## Automação e diagnóstico
+
+Com Python Playwright e Chromium instalados, execute `python tests/smoke_browser.py` enquanto `npm run dev` estiver ativo. `CHROMIUM_PATH` altera o executável e `ORIGENS_ARTIFACTS` altera o destino de capturas/relatório. A realocação de desenvolvimento apenas abrevia viagens; os objetivos e o combate são acionados pelos controles do jogo.
+
+Ao relatar um problema, inclua versão, passos de reprodução, raça, técnica, bioma, modo de câmera, qualidade e mensagem do Console. Uma gravação curta é mais útil que uma imagem para problemas de animação.

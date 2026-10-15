@@ -2,7 +2,7 @@ import raceData from './races.json';
 import abilityData from './abilities.json';
 
 export type RaceId = 'saiyajin' | 'terraqueo' | 'namekuseijin' | 'majin';
-export type GameState = 'MAIN_MENU' | 'CHARACTER_SELECT' | 'RACE_SELECTION' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'SETTINGS' | 'SKILLS';
+export type GameState = 'MAIN_MENU' | 'CHARACTER_SELECT' | 'RACE_SELECTION' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'SETTINGS' | 'SKILLS' | 'DEFEATED';
 export type Race = {
   id: RaceId;
   name: string;
@@ -23,7 +23,7 @@ export const WALK_SPEED = 2.25;
 export const RUN_SPEED = 9;
 export const JUMP_SPEED = 9;
 export const GRAVITY = 24;
-export const WORLD_HALF = 105;
+export { WORLD_HALF } from '../world/landscape';
 
 export function getRace(id: RaceId): Race {
   return RACES.find((race) => race.id === id) ?? RACES[0];

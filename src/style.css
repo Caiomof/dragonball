@@ -45,3 +45,18 @@
 .swatches{display:flex;gap:8px;margin:8px 0 14px}.swatch{width:28px;height:28px;border:2px solid #fff6;border-radius:50%;padding:0}
 .creator-nav{display:flex;gap:10px;margin-top:16px}
 .hidden{display:none!important}
+
+/* Journey and accessible presentation settings */
+.journey-panel{position:absolute;right:24px;top:100px;width:min(285px,28vw);padding:18px 20px;background:linear-gradient(135deg,rgba(8,24,31,.91),rgba(19,41,48,.76));border:1px solid #b6d4ca40;border-radius:12px;box-shadow:0 12px 32px #0002;pointer-events:none}
+.journey-panel strong{display:block;color:#fff0ce;font-size:17px;margin:7px 0}.journey-panel p{font-size:12px;line-height:1.6;color:#d5e3df;margin:8px 0}.journey-panel progress{width:100%;height:5px;accent-color:#f1c478;margin-top:12px}.journey-panel #journey-direction{font-size:12px;color:#b4e4df;line-height:1.5}
+.preview-controls{display:flex;gap:14px;margin:12px 0}.preview-controls label,.settings-extra label{display:grid;gap:6px;font-size:10px;letter-spacing:.09em;color:#c2d3d0}.preview-controls input{width:120px}.settings-extra{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 0;border-top:1px solid #ffffff20;margin-top:12px}.settings-extra select{background:#173039;color:#f9efd6;padding:8px;border:1px solid #b6d4ca40;border-radius:5px}.profile-edit{background:transparent;border:1px solid #ffffff35;color:#eee6ce;padding:9px;border-radius:5px;cursor:pointer}
+.panel-card{max-height:90vh;overflow-y:auto}.race-sidebar{max-height:92vh;overflow-y:auto}.swatch:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f3cc78;outline-offset:3px}
+@media(max-width:900px){.journey-panel{top:auto;bottom:118px;right:12px;width:225px;padding:12px}.journey-panel p{font-size:11px}.world-label{right:12px}.preview-controls{flex-wrap:wrap}.settings-extra{grid-template-columns:1fr}.character-slot{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.screen{animation:none!important;transition:none!important}}
+
+#target-indicator{top:300px;right:24px;min-width:220px;max-width:285px}#journey-panel{top:95px}.race-preview-caption{left:59%;bottom:45px}.race-preview-caption h3{font-size:44px}.race-stats-panel{top:auto;bottom:45px;right:24px;width:175px;padding:14px}.race-stats-panel .stat-row{margin-top:10px}.toast{z-index:60;max-width:85vw;white-space:normal;text-align:center;pointer-events:none}.race-screen{background:linear-gradient(90deg,rgba(5,20,29,.95),rgba(5,21,30,.9) 40%,rgba(5,20,27,.08) 61%,rgba(7,26,33,.12))}
+@media(max-width:900px){#journey-panel{top:85px;bottom:auto;max-width:220px}#target-indicator{top:300px;right:12px;min-width:180px;width:200px}.race-preview-caption h3{font-size:32px}.race-stats-panel{display:none}.race-sidebar{width:44vw;margin-left:4vw}.world-label{left:68%;max-width:50vw;padding:5px}.world-label small{display:none}.ability-panel{display:none}.hud-top-left{width:200px}.resource{width:195px}}
+
+@media(max-width:1200px){.ability-panel{display:none}.hud-bottom-left{bottom:125px}}
+
+.race-screen[data-step='3'] .race-stats-panel{display:none}.race-preview-caption{max-width:38vw}.race-preview-caption h3{font-size:clamp(24px,3vw,44px);overflow-wrap:anywhere}

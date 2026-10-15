@@ -5,16 +5,17 @@ import type { World } from '../world/World';
 export class TrainingDummy {
   readonly group = new THREE.Group();
   readonly hitCenter = new THREE.Vector3();
-  health = ABILITIES.trainingDummy.health;
-  readonly maxHealth = ABILITIES.trainingDummy.health;
+  health: number;
+  readonly maxHealth: number;
   private readonly healthFill = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.13), new THREE.MeshBasicMaterial({ color: 0x6ce9c8, side: THREE.DoubleSide, depthTest: false }));
   private readonly body: THREE.Group;
   private respawnRemaining = 0;
   private flashRemaining = 0;
 
-  constructor(world: World) {
+  constructor(world: World, position = world.dummyPosition, health = ABILITIES.trainingDummy.health) {
+    this.health=this.maxHealth=health;
     this.group.name = 'TrainingDummy — Guardião da Clareira';
-    this.group.position.copy(world.dummyPosition);
+    this.group.position.copy(position);
     this.body = new THREE.Group();
     this.group.add(this.body);
     const wood = new THREE.MeshStandardMaterial({ color: 0x8d6040, flatShading: true, roughness: 0.9 });
