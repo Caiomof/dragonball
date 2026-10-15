@@ -45,5 +45,5 @@ test('inicializador e modelo offline incluido possuem documentação', () => {
   assert.ok(existsSync(join(project, 'JOGAR.bat')));
   assert.ok(existsSync(join(project, 'public/models/LEIA-MODELO.txt')));
   assert.ok(existsSync(join(project, 'public/models/origens-warrior.glb')));
-  assert.match(read('JOGAR.bat'), /origens-warrior\.glb/);
+  assert.match(read('JOGAR.bat'), /Superhero_Male_FullBody\.gltf/);
 });

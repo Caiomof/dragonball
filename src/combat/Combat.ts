@@ -202,7 +202,7 @@ export class CombatEffects {
       const progress = Math.max(0, Math.min(1, (e.life - e.style.chargeSeconds) / e.style.effectSeconds));
       const distance = e.origin.distanceTo(e.destination);
       e.charge.position.copy(e.origin);
-      e.charge.visible = !active;
+      e.charge.visible = false;
       e.charge.scale.setScalar(0.7 + Math.min(1, e.life / Math.max(0.01, e.style.chargeSeconds)) * 0.8 + Math.sin(e.life * 65) * 0.08);
       e.body.visible = active;
       const disc = e.style.style === 'kienzan';

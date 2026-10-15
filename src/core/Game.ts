@@ -4,10 +4,11 @@ import { Sound } from '../audio/Sound';
 import { CombatEffects, TrainingDummy, type AttackStyle } from '../combat/Combat';
 import { GRAVITY, JUMP_SPEED, RACES, RUN_SPEED, WALK_SPEED, createStats, getRace, spendKi } from '../data/gameConfig';
 import { SKILLS, type SkillId } from '../data/skills';
-import { ATTRIBUTE_INFO, makeProfile, loadProfiles, saveProfiles, type Appearance, type PlayerProfile, type AttributeKey } from '../data/profiles';
+import { ATTRIBUTE_INFO, RACE_APPEARANCE, makeProfile, loadProfiles, saveProfiles, type Appearance, type PlayerProfile, type AttributeKey } from '../data/profiles';
 import type { FighterStats, GameState, RaceId } from '../data/gameConfig';
 import { Ui } from '../ui/Ui';
 import { World, type WorldHit } from '../world/World';
+import { Wildlife } from '../world/Wildlife';
 
 function smoothAngle(current: number, destination: number, factor: number): number {
   return current + Math.atan2(Math.sin(destination - current), Math.cos(destination - current)) * factor;
@@ -21,6 +22,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.07, 850);
   private readonly world: World;
+  private readonly wildlife: Wildlife;
   private readonly dummy: TrainingDummy;
   private readonly combat: CombatEffects;
   private readonly ui = new Ui();
@@ -59,6 +61,12 @@ export class Game {
   private lastMeleeCombo = -10;
   private comboStep = 0;
   private lastKiBall = -10;
+  private kiBlastHeld = false;
+  private kiBlastSince = 0;
+  private powerSurge = false;
+  private powerSurgeSince = 0;
+  private rootedUntil = 0;
+  private pendingShot: { at: number; run: () => void } | null = null;
   private staminaRegenDelay = 0;
   private viewMode: ViewMode = 'third';
   private fov = 70;
@@ -86,10 +94,12 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.27;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.localClippingEnabled = true;
     this.renderer.domElement.id = 'game-canvas';
     this.scene.add(this.camera);
     canvasRoot.append(this.renderer.domElement);
     this.world = new World(this.scene);
+    this.wildlife = new Wildlife(this.world);
     this.dummy = new TrainingDummy(this.world);
     this.combat = new CombatEffects(this.scene);
     this.character = new Character(RACES[0]);
@@ -114,11 +124,11 @@ export class Game {
     this.ui.on({
       start: () => { this.sound.play('click'); this.ui.renderProfiles(this.profiles); this.changeState('CHARACTER_SELECT'); },
       heroCreate: () => this.createHero(),
-      heroSelect: id => this.editHero(id),
+      heroSelect: id => this.playHero(id),
       heroDelete: id => this.deleteHero(id),
       heroBack: () => this.changeState('MAIN_MENU'),
       customize: (appearance, name) => this.previewCustomization(appearance, name),
-      preview: id => { this.sound.play('select'); this.selectRace(id); },
+      preview: id => { this.sound.play('select'); this.selectRace(id, true); },
       confirm: () => this.startAdventure(),
       back: () => { this.sound.play('click'); this.ui.renderProfiles(this.profiles); this.changeState('CHARACTER_SELECT'); },
       pause: () => this.pause(),
@@ -150,12 +160,14 @@ export class Game {
     this.ui.state(state);
     if (state !== 'PLAYING' && state !== 'PAUSED') this.keys.clear();
     if (state === 'RACE_SELECTION') this.selectRace(this.ui.selected);
-    this.character.root.visible = state !== 'PLAYING' || this.viewMode === 'third' || this.heroReady;
-    this.character.setFirstPerson(state === 'PLAYING' && this.viewMode === 'first' && this.heroReady);
-    this.firstPersonArms.visible = state === 'PLAYING' && this.viewMode === 'first' && !this.heroReady;
+    const inPlay = state === 'PLAYING';
+    const first = inPlay && this.viewMode === 'first';
+    this.character.root.visible = inPlay && (this.viewMode === 'third' || this.heroReady);
+    this.character.setFirstPerson(first && this.heroReady);
+    this.firstPersonArms.visible = first && !this.heroReady;
   }
 
-  private selectRace(race: RaceId): void {
+  private selectRace(race: RaceId, applyLook = false): void {
     this.raceId = race;
     this.scene.remove(this.character.root);
     this.character.dispose();
@@ -169,6 +181,11 @@ export class Game {
     this.fpSkinMaterial.color.setHex(skins[race]);
     this.fpSleeveMaterial.color.setHex(sleeves[race]);
     this.character.root.position.copy(this.world.spawn);
+    if (applyLook && this.editingProfile && this.state === 'RACE_SELECTION') {
+      this.editingProfile.race = race;
+      this.editingProfile.appearance = { ...RACE_APPEARANCE[race] };
+      this.ui.editAppearance(this.editingProfile.appearance, this.editingProfile.name);
+    }
     if (this.editingProfile) this.character.setAppearance(this.editingProfile.appearance);
     this.character.root.rotation.y = Math.PI;
     this.scene.add(this.character.root);
@@ -235,11 +252,16 @@ export class Game {
     this.requestCapture();
   }
   private openPanel(panel: 'SETTINGS' | 'SKILLS'): void {
-    if (!['PLAYING', 'PAUSED', 'MAIN_MENU'].includes(this.state)) return;
-    if (panel === 'SKILLS' && this.state === 'MAIN_MENU') return;
+    if (panel === 'SETTINGS' && this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
+    if (panel === 'SKILLS' && this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
     this.beforePanel = this.state;
     this.changeState(panel);
     if (document.pointerLockElement) void document.exitPointerLock();
+    if (panel === 'SETTINGS') {
+      this.camera.fov = this.fov;
+      this.camera.updateProjectionMatrix();
+      this.ui.setView(this.viewMode, this.fov, this.sensitivity);
+    }
     if (panel === 'SKILLS') this.renderAttributes();
   }
   private closePanel(): void {
@@ -248,29 +270,33 @@ export class Game {
     if (this.beforePanel === 'PLAYING') this.requestCapture();
   }
   private returnToMenu(): void {
-    if (document.pointerLockElement) void document.exitPointerLock();
+    this.cancelCharge();
+    this.kiBlastHeld = false;
+    this.powerSurge = false;
+    this.character.setAuraActive(false);
     this.ui.renderProfiles(this.profiles);
     this.activeProfile = null;
     this.editingProfile = null;
     this.selectRace('saiyajin');
     this.ui.select('saiyajin', false);
     this.changeState('MAIN_MENU');
+    if (document.pointerLockElement) void document.exitPointerLock();
   }
 
   private createHero(): void {
     this.editingProfile = makeProfile();
     this.ui.editAppearance(this.editingProfile.appearance, this.editingProfile.name);
     this.ui.select(this.editingProfile.race, false);
+    this.ui.setCreatorStep(1);
     this.changeState('RACE_SELECTION');
   }
 
-  private editHero(id: string): void {
+  private playHero(id: string): void {
     const profile = this.profiles.find(p => p.id === id);
-    if (!profile)return;
+    if (!profile) return;
     this.editingProfile = structuredClone(profile);
-    this.ui.editAppearance(this.editingProfile.appearance, this.editingProfile.name);
     this.ui.select(profile.race, false);
-    this.changeState('RACE_SELECTION');
+    this.startAdventure();
   }
 
   private deleteHero(id: string): void {
@@ -362,6 +388,17 @@ export class Game {
       if (event.code === 'KeyV') { this.viewMode = this.viewMode === 'third' ? 'first' : 'third'; this.persistSettings(); this.ui.setView(this.viewMode, this.fov, this.sensitivity); this.ui.toast(this.viewMode === 'first' ? 'VISÃO EM PRIMEIRA PESSOA' : 'VISÃO EM TERCEIRA PESSOA'); return; }
       if (event.code === 'KeyK') { this.openPanel('SKILLS'); return; }
       if (event.code === 'KeyO') { this.openPanel('SETTINGS'); return; }
+      if (event.code === 'KeyX' && !event.repeat) {
+        this.powerSurge = true;
+        this.powerSurgeSince = this.elapsed;
+        const aura = this.raceAuraColors();
+        this.character.setAuraColor(aura.color, aura.core);
+        this.character.setAuraActive(true, 'surge');
+        this.character.gesture('charge');
+        this.ui.toast('PODER MÁXIMO · CARREGANDO KI', 'success', 1.1);
+        this.sound.play('charge');
+        return;
+      }
       if (/^Digit[1-4]$/.test(event.code)) {
         const skill=SKILLS[Number(event.code.slice(-1))-1];
         this.selectSkill(skill.id);
@@ -391,9 +428,16 @@ export class Game {
     });
     window.addEventListener('keyup', event => {
       this.keys.delete(event.code);
+      if (event.code === 'KeyX') {
+        this.powerSurge = false;
+        if (!this.heldSkill && !this.kiBlastHeld) {
+          this.character.setAuraActive(false);
+          this.ui.setCharge(null, 0, 1);
+        }
+      }
       if (/^Digit[1-4]$/.test(event.code) && this.heldSkill === SKILLS[Number(event.code.slice(-1))-1].id) this.releaseCharge();
     });
-    window.addEventListener('blur', () => { this.keys.clear(); this.cancelCharge(); if (this.state === 'PLAYING') this.pause(); });
+    window.addEventListener('blur', () => { this.keys.clear(); this.cancelCharge(); });
     window.addEventListener('mousemove', event => {
       if (this.state !== 'PLAYING') return;
       if (document.pointerLockElement === this.renderer.domElement || event.buttons === 2) {
@@ -405,7 +449,10 @@ export class Game {
       if (this.state !== 'PLAYING') return;
       if (document.pointerLockElement !== this.renderer.domElement) { this.requestCapture(); return; }
       if (event.button === 0) this.punch();
-      if (event.button === 2) this.kiBlast();
+      if (event.button === 2) this.beginKiBlast();
+    });
+    window.addEventListener('mouseup', event => {
+      if (event.button === 2) this.releaseKiBlast();
     });
     window.addEventListener('wheel', event => {
       if (this.state !== 'PLAYING') return;
@@ -423,15 +470,11 @@ export class Game {
       }
     }, { passive: false });
     this.renderer.domElement.addEventListener('contextmenu', event => event.preventDefault());
-    document.addEventListener('pointerlockchange', () => {
-      if (!document.pointerLockElement && this.state === 'PLAYING') this.pause();
-    });
     window.addEventListener('resize', () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
     });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'PLAYING') this.pause(); });
   }
 
   private aim(): WorldHit {
@@ -447,8 +490,9 @@ export class Game {
     if(this.stats.ki<spec.kiCost){this.ui.toast('KI INSUFICIENTE','danger',1);return;}
     this.heldSkill=id;
     this.heldSince=this.elapsed;
-    this.character.gesture(Character.castAnimationForSkill(id));
-    this.character.setAuraColor(spec.colorHex,spec.coreHex);
+    this.character.gesture('charge');
+    this.character.setAuraColor(spec.colorHex, spec.coreHex);
+    this.character.setAuraActive(true, 'charge');
     this.fpEnergyMaterial.color.setHex(spec.coreHex);
     this.fpEnergyLight.color.setHex(spec.colorHex);
     this.sound.play('charge');
@@ -457,6 +501,7 @@ export class Game {
   private cancelCharge(): void {
     this.heldSkill=null;
     this.ui.setCharge(null,0,1);
+    if (!this.powerSurge && !this.kiBlastHeld) this.character.setAuraActive(false);
   }
 
   private releaseCharge(): void {
@@ -469,16 +514,34 @@ export class Game {
     const kiCost=spec.kiCost+Math.ceil(held*10);
     if(!spendKi(this.stats,kiCost)) {this.ui.toast(`PRECISA DE ${kiCost} KI PARA ESTE CARREGAMENTO`,'danger');this.sound.play('deny');return;}
     this.cooldownUntil.set(id,this.elapsed+spec.cooldown);
-    this.character.gesture(Character.castAnimationForSkill(id));
-    this.attackEnd=this.elapsed+.36+spec.duration;
-    const damage=Math.round(spec.damage*(1+level*2.2)*this.powerMultiplier());
-    this.castAttack(spec.id, spec.colorHex, spec.coreHex, spec.range, .07, spec.duration, damage, 1+level*1.8);
-    this.sound.play('beam');
+    this.character.gesture(id === 'kienzan' ? 'disc' : 'beam');
+    this.attackEnd = this.elapsed + 0.55;
+    this.rootedUntil = this.elapsed + 0.62;
+    const damage = Math.round(spec.damage * (1 + level * 2.2) * this.powerMultiplier());
+    this.pendingShot = {
+      at: this.elapsed + 0.28,
+      run: () => {
+        this.castAttack(spec.id, spec.colorHex, spec.coreHex, spec.range, 0.2, spec.duration, damage, 1 + level * 1.8);
+        this.sound.play('beam');
+      }
+    };
   }
 
   private powerMultiplier(): number {
     const race=getRace(this.raceId);
-    return THREE.MathUtils.clamp(.7+this.stats.power/Math.max(1,race.power)*.3,.6,12);
+    let mult = THREE.MathUtils.clamp(.7+this.stats.power/Math.max(1,race.power)*.3,.6,12);
+    if (this.powerSurge) {
+      const held = THREE.MathUtils.clamp(this.elapsed - this.powerSurgeSince, 0, 2.8);
+      mult *= 1 + held * 0.22;
+    }
+    return mult;
+  }
+
+  private raceAuraColors(): { color: number; core: number } {
+    const accent = getRace(this.raceId).accent.replace('#', '');
+    const color = Number.parseInt(accent, 16);
+    const core = color ^ 0x303030;
+    return { color, core };
   }
 
   private castAttack(style: AttackStyle, color: number, core: number, range: number, chargeSeconds: number, effectSeconds: number, damage: number, size=1): void {
@@ -490,7 +553,11 @@ export class Game {
     const travel=hit.point.clone().sub(muzzle);
     const destination=travel.length()>range ? muzzle.clone().addScaledVector(travel.normalize(),range):hit.point.clone();
     this.character.root.rotation.y=this.yaw;
-    this.combat.cast(muzzle,destination,{style,color,core,chargeSeconds,effectSeconds,size},point=>this.applyHit(hit,destination,damage,point));
+    this.combat.cast(muzzle,destination,{style,color,core,chargeSeconds,effectSeconds,size},point=>{
+      const beast = this.wildlife.damageAlong(muzzle, destination, 3.8, damage);
+      if (beast?.dead) this.ui.toast('ANIMAL DERROTADO', 'success', 0.7);
+      this.applyHit(hit,destination,damage,point);
+    });
   }
 
   private applyHit(hit: WorldHit, destination: THREE.Vector3, amount:number, point:THREE.Vector3):void {
@@ -515,30 +582,59 @@ export class Game {
     this.character.root.rotation.y=this.yaw;
     this.attackEnd = this.elapsed + (this.comboStep === 2 ? 0.72 : 0.5);
     this.character.gesture(this.comboStep===2?'punchcross':'punch');
-    this.character.setAuraColor(0xff4a3a, 0xffd0c4);
     this.sound.play('impact');
     const origin=this.character.root.position.clone().add(new THREE.Vector3(0,1.3,0));
     const dir=this.forward();
     // Detect a melee target from the fighter (not from the distant third-person camera).
+    const beast = this.wildlife.strike(origin, dir, 2.5, Math.round((7 + this.comboStep * 3) * this.powerMultiplier()));
+    if (beast && beast.actual > 0) {
+      this.ui.toast(beast.dead ? 'ANIMAL DERROTADO' : `GOLPE · ${beast.actual}`, beast.dead ? 'success' : 'info', 0.6);
+      return;
+    }
     const hit=this.world.trace(origin,dir,3.05,this.dummy);
-    const fist = origin.clone().addScaledVector(dir, 1.15);
-    this.combat.burst(fist, 0xff5a45);
     if(hit.point.distanceTo(origin)>3.06)return;
     const amount=Math.round((7+this.comboStep*3)*this.powerMultiplier());
     this.applyHit(hit,hit.point,amount,hit.point);
     this.ui.toast(`COMBO ${this.comboStep} · SOCO`, 'info',.35);
   }
 
-  private kiBlast():void {
-    if(this.elapsed-this.lastKiBall<.31)return;
-    if(!spendKi(this.stats,6)){this.ui.toast('KI INSUFICIENTE','danger',.7);return;}
-    this.lastKiBall=this.elapsed;
-    this.character.root.rotation.y=this.yaw;
-    this.attackEnd=this.elapsed+.29;
-    this.character.gesture('punch');
-    this.character.setAuraColor(0x45b8ff,0xf2ffff);
-    this.castAttack('orb',0x45b8ff,0xffffff,58,.07,.48,Math.round(12*this.powerMultiplier()),.7);
-    this.sound.play('beam');
+  private beginKiBlast(): void {
+    if (this.kiBlastHeld || this.elapsed - this.lastKiBall < 0.22) return;
+    if (this.stats.ki < 4) { this.ui.toast('KI INSUFICIENTE', 'danger', .7); return; }
+    this.kiBlastHeld = true;
+    this.kiBlastSince = this.elapsed;
+    this.character.root.rotation.y = this.yaw;
+    this.attackEnd = this.elapsed + 1.2;
+    this.character.gesture('charge');
+    const aura = this.raceAuraColors();
+    this.character.setAuraColor(aura.color, aura.core);
+    this.character.setAuraActive(true, 'charge');
+    this.fpEnergyMaterial.color.setHex(aura.core);
+    this.fpEnergyLight.color.setHex(aura.color);
+    this.sound.play('charge');
+  }
+
+  private releaseKiBlast(): void {
+    if (!this.kiBlastHeld) return;
+    this.kiBlastHeld = false;
+    this.character.setAuraActive(false);
+    const held = THREE.MathUtils.clamp(this.elapsed - this.kiBlastSince, 0, 0.85);
+    const size = 0.62 + held * 0.38;
+    const kiCost = 4 + Math.round(held * 8);
+    if (!spendKi(this.stats, kiCost)) { this.ui.toast('KI INSUFICIENTE', 'danger', .7); this.attackEnd = this.elapsed; return; }
+    this.lastKiBall = this.elapsed;
+    this.attackEnd = this.elapsed + 0.48;
+    this.rootedUntil = this.elapsed + 0.5;
+    const aura = this.raceAuraColors();
+    this.character.setAuraColor(aura.color, aura.core);
+    this.character.gesture('kiopen');
+    this.pendingShot = {
+      at: this.elapsed + 0.22,
+      run: () => {
+        this.castAttack('orb', aura.color, aura.core, 52, 0.08, 0.42 + held * 0.12, Math.round((10 + held * 14) * this.powerMultiplier()), size);
+        this.sound.play('beam');
+      }
+    };
   }
 
   private tick = (time: number): void => {
@@ -550,16 +646,49 @@ export class Game {
     this.dummy.update(dt, this.camera);
     if (this.state === 'PLAYING') {
       this.elapsed += dt;
+      if (this.pendingShot && this.elapsed >= this.pendingShot.at) {
+        const shot = this.pendingShot;
+        this.pendingShot = null;
+        shot.run();
+      }
+      this.wildlife.update(dt, this.character.root.position, amount => {
+        this.stats.health = Math.max(0, this.stats.health - amount);
+        this.ui.toast('UM LOBO TE ALCANÇOU', 'danger', 0.6);
+        if (this.stats.health <= 0) {
+          this.stats.health = this.stats.maxHealth;
+          this.character.root.position.copy(this.world.spawn);
+          this.flying = false;
+          this.ui.toast('VOCÊ CAIU · DE VOLTA AO INÍCIO', 'danger', 1.4);
+        }
+      });
       this.updatePlayer(dt);
       this.updateCamera(dt);
       this.updateFirstPersonHands(dt);
       this.stats.ki = Math.min(this.stats.maxKi, this.stats.ki + (this.elapsed > this.attackEnd + .8 && !this.heldSkill ? this.stats.kiRegen : 0) * dt);
       if(this.elapsed>this.staminaRegenDelay)this.stats.stamina=Math.min(this.stats.maxStamina,this.stats.stamina+22*dt);
-      if(this.heldSkill) {
+      if (this.powerSurge) {
+        this.stats.stamina = Math.max(0, this.stats.stamina - 14 * dt);
+        this.stats.ki = Math.max(0, this.stats.ki - 4 * dt);
+        this.character.setAuraActive(true, 'surge');
+        const seconds = Math.min(2.8, this.elapsed - this.powerSurgeSince);
+        this.ui.setCharge('PODER MÁXIMO', seconds / 2.8, 1 + seconds * 0.22);
+        if (this.stats.stamina <= 0.5) { this.powerSurge = false; this.character.setAuraActive(false); this.ui.setCharge(null, 0, 1); this.ui.toast('STAMINA ESGOTADA', 'info', .8); }
+      } else if (this.kiBlastHeld) {
+        const held = THREE.MathUtils.clamp(this.elapsed - this.kiBlastSince, 0, 0.85);
+        this.ui.setCharge('BOLA DE KI', held / 0.85, 1 + held * 0.45);
+      } else if(this.heldSkill) {
         const spec=SKILLS.find(s=>s.id===this.heldSkill)!;
         const seconds=Math.min(this.maxCharge,this.elapsed-this.heldSince);
         this.attackEnd=this.elapsed+.18;
+        this.character.setAuraActive(true, 'charge');
         this.ui.setCharge(spec.short,seconds/this.maxCharge,1+seconds/this.maxCharge*2.2);
+      } else if (!this.pendingShot) this.ui.setCharge(null, 0, 1);
+      if (this.kiBlastHeld) {
+        const held = THREE.MathUtils.clamp(this.elapsed - this.kiBlastSince, 0, 0.85);
+        this.attackEnd = this.elapsed + 0.2;
+        const pulse = 0.72 + held * 0.35 + Math.sin(this.elapsed * 18) * 0.08;
+        this.fpEnergy.visible = this.viewMode === 'first';
+        this.fpEnergy.scale.setScalar(pulse);
       }
       const cds = Object.fromEntries(SKILLS.map(skill => [skill.id, Math.max(0, (this.cooldownUntil.get(skill.id) ?? 0) - this.elapsed)])) as Partial<Record<SkillId, number>>;
       const cooldown = cds[this.activeSkill] ?? 0;
@@ -569,6 +698,7 @@ export class Game {
         this.ui.setAimHit(Boolean(aim.dummy || aim.objectId !== undefined));
       }
     } else if (this.state === 'MAIN_MENU') {
+      this.character.setFirstPerson(false);
       this.character.root.visible = true;
       this.character.root.rotation.y = Math.PI - Math.sin(this.cameraTime * 0.26) * 0.18;
       this.character.animate(dt, 0, false, false);
@@ -576,35 +706,49 @@ export class Game {
       this.camera.position.lerp(new THREE.Vector3(p.x + 17 + Math.sin(this.cameraTime * 0.2) * 2, p.y + 8.1, p.z + 18), Math.min(1, dt * 1.1));
       this.camera.lookAt(p.x - 1.4, p.y + 1.9, p.z - 4);
     } else if (this.state === 'RACE_SELECTION') {
+      this.character.setFirstPerson(false);
       this.character.root.visible = true;
-      this.character.root.rotation.y = Math.PI + Math.sin(this.cameraTime * 0.44) * 0.21;
+      const step = this.ui.creatorStep;
+      this.character.root.rotation.y = step === 3 ? Math.PI * 0.72 : Math.PI * 0.5;
       this.character.animate(dt, 0, false, false);
       const p = this.world.spawn;
-      this.camera.position.lerp(new THREE.Vector3(p.x + 0.8, p.y + 2.85, p.z + 7.25), Math.min(1, dt * 3));
-      this.camera.lookAt(p.x, p.y + 1.5, p.z);
+      const view = step === 3
+        ? new THREE.Vector3(p.x + 1.35, p.y + 1.85, p.z + 2.15)
+        : new THREE.Vector3(p.x + 3.8, p.y + 1.2, p.z + 0.15);
+      this.camera.position.lerp(view, Math.min(1, dt * 3));
+      this.camera.lookAt(p.x, p.y + (step === 3 ? 1.65 : 1.15), p.z);
     }
     this.frameCounter++;
     if (this.frameCounter % 30 === 0 && dt > 0) this.fps = Math.round(1 / dt);
     this.ui.update();
-    if (this.debug) this.debugOverlay.textContent = `DEBUG v0.1.7 · FPS ${this.fps}\nEstado: ${this.state}\nRaça: ${this.raceId}\nPosição: ${this.character.root.position.toArray().map(v => v.toFixed(1)).join(', ')}\nVisão: ${this.viewMode} FOV ${this.fov}\nVoando: ${this.flying}\nNo chão: ${this.grounded}\nKi: ${Math.round(this.stats.ki)}\nPoder: ${this.stats.power}\nHabilidade: ${this.activeSkill}\nStamina: ${this.stats.stamina.toFixed(0)}\nObjetos destrutíveis: ${this.world.breakableCount}`;
+    if (this.debug) this.debugOverlay.textContent = `DEBUG v0.1.14 · FPS ${this.fps}\nEstado: ${this.state}\nRaça: ${this.raceId}\nPosição: ${this.character.root.position.toArray().map(v => v.toFixed(1)).join(', ')}\nVisão: ${this.viewMode} FOV ${this.fov}\nVoando: ${this.flying}\nNo chão: ${this.grounded}\nKi: ${Math.round(this.stats.ki)}\nPoder: ${this.stats.power}\nHabilidade: ${this.activeSkill}\nStamina: ${this.stats.stamina.toFixed(0)}\nObjetos destrutíveis: ${this.world.breakableCount}`;
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.tick);
   };
 
   private updatePlayer(dt: number): void {
-    const inputX = Number(this.keys.has('KeyD') || this.keys.has('ArrowRight')) - Number(this.keys.has('KeyA') || this.keys.has('ArrowLeft'));
-    const inputZ = Number(this.keys.has('KeyW') || this.keys.has('ArrowUp')) - Number(this.keys.has('KeyS') || this.keys.has('ArrowDown'));
+    const rooted = Boolean(this.heldSkill || this.kiBlastHeld || this.pendingShot || this.elapsed < this.rootedUntil);
+    let inputX = Number(this.keys.has('KeyD') || this.keys.has('ArrowRight')) - Number(this.keys.has('KeyA') || this.keys.has('ArrowLeft'));
+    let inputZ = Number(this.keys.has('KeyW') || this.keys.has('ArrowUp')) - Number(this.keys.has('KeyS') || this.keys.has('ArrowDown'));
+    if (rooted) { inputX = 0; inputZ = 0; }
     const tryingSprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-    const sprint = tryingSprint && this.stats.stamina > 0.05;
-    const speed=this.flying?(sprint?20:12)*this.stats.flight:(sprint?RUN_SPEED:WALK_SPEED)*this.stats.speed;
+    const sprint = tryingSprint && this.stats.stamina > 0.05 && !this.flying;
+    const inRiver = !this.flying && this.world.inRiver(this.character.root.position.x, this.character.root.position.z);
+    let speed=this.flying?(tryingSprint?20:12)*this.stats.flight:(sprint?RUN_SPEED:WALK_SPEED)*this.stats.speed;
+    if (inRiver) speed *= 0.45;
     const desired = new THREE.Vector3(Math.cos(this.yaw) * inputX - Math.sin(this.yaw) * inputZ, 0, -Math.sin(this.yaw) * inputX - Math.cos(this.yaw) * inputZ);
     if (desired.lengthSq() > 0.001) desired.normalize().multiplyScalar(speed);
-    if(sprint&&desired.lengthSq()>0.25){
-      this.stats.stamina=Math.max(0,this.stats.stamina-(this.flying?12:14)*dt);
-      this.staminaRegenDelay=this.elapsed+.75;
-    } else if(this.flying && desired.lengthSq()>0.25) {
-      this.stats.stamina=Math.max(0,this.stats.stamina-3.5*dt);
-      this.staminaRegenDelay=this.elapsed+.4;
+    if (sprint && desired.lengthSq() > 0.25) {
+      this.stats.stamina = Math.max(0, this.stats.stamina - 14 * dt);
+      this.staminaRegenDelay = this.elapsed + .75;
+    }
+    if (this.flying) {
+      const drain = (7 + (desired.lengthSq() > 0.25 ? 6 : 0)) * dt;
+      this.stats.ki = Math.max(0, this.stats.ki - drain);
+      if (this.stats.ki <= 0.4) {
+        this.flying = false;
+        this.ui.toast('KI ESGOTADO · VOO ENCERRADO', 'danger', 1.1);
+      }
     }
     this.horizontalVelocity.lerp(desired, 1 - Math.exp(-dt * (this.grounded || this.flying ? 9 : 3.4)));
     const pos = this.character.root.position;
@@ -615,8 +759,14 @@ export class Game {
     if (this.flying || this.world.isWalkable(pos.x, nextZ)) pos.z = nextZ;
     else this.horizontalVelocity.z = 0;
     const ground = this.world.height(pos.x, pos.z);
-    if (this.flying) {
-      const up = Number(this.keys.has('Space')) - Number(this.keys.has('ControlLeft') || this.keys.has('ControlRight'));
+    const swimming = !this.flying && this.world.inRiver(pos.x, pos.z);
+    if (swimming) {
+      const surface = this.world.waterLevel(pos.x, pos.z) - 0.22;
+      pos.y = THREE.MathUtils.damp(pos.y, surface, 14, dt);
+      this.verticalVelocity = 0;
+      this.grounded = false;
+    } else if (this.flying) {
+      const up = rooted ? 0 : Number(this.keys.has('Space')) - Number(this.keys.has('ControlLeft') || this.keys.has('ControlRight'));
       const desiredY = up * (sprint ? 11 : 7.5)*this.stats.flight;
       this.verticalVelocity = THREE.MathUtils.damp(this.verticalVelocity, desiredY, 6, dt);
       pos.y = Math.max(ground + 1.2, pos.y + this.verticalVelocity * dt);
@@ -631,7 +781,7 @@ export class Game {
         this.verticalVelocity = 0;
       }
     }
-    if (!this.flying && !this.grounded) {
+    if (!this.flying && !this.grounded && !swimming) {
       this.verticalVelocity -= GRAVITY * dt;
       pos.y += this.verticalVelocity * dt;
       if (pos.y <= ground) {
@@ -641,13 +791,13 @@ export class Game {
       }
     }
     const move = this.horizontalVelocity.length();
-    if (this.viewMode === 'first' && this.heroReady) this.character.root.rotation.y = this.yaw;
+    if (rooted || (this.viewMode === 'first' && this.heroReady)) this.character.root.rotation.y = this.yaw;
     else if (move > 0.25 && this.elapsed >= this.attackEnd) {
       const angle = Math.atan2(-this.horizontalVelocity.x, -this.horizontalVelocity.z);
       this.character.root.rotation.y = smoothAngle(this.character.root.rotation.y, angle, Math.min(1, dt * 13));
     }
     const flightPhase = !this.flying ? 'ground' : this.elapsed - this.flyingSince < 0.65 ? 'takeoff' : this.elapsed - this.flyingSince > 2.4 ? 'cruise' : 'hover';
-    this.character.animate(dt, move, !this.grounded, this.elapsed < this.attackEnd, this.flying, sprint, flightPhase, this.heldSkill ?? this.activeSkill);
+    this.character.animate(dt, move, !this.grounded && !swimming, this.elapsed < this.attackEnd, this.flying, sprint, flightPhase, this.heldSkill ?? this.activeSkill, swimming, Boolean(this.heldSkill || this.kiBlastHeld || this.powerSurge));
   }
 
   private updateCamera(dt: number): void {
@@ -656,6 +806,10 @@ export class Game {
     const head = origin.clone().add(new THREE.Vector3(0, this.flying ? 1.9 : 1.75, 0));
     const eye = new THREE.Vector3();
     const eyesReady = this.viewMode === 'first' && this.heroReady && this.character.copyEye(eye);
+    if (this.viewMode === 'first' && this.heroReady) {
+      const chest = origin.clone().add(new THREE.Vector3(0, 1.28, 0)).addScaledVector(forward, 0.2);
+      this.character.clipPlane.setFromNormalAndCoplanarPoint(forward, chest);
+    }
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const desired = eyesReady
       ? eye.addScaledVector(forward, 0.12)
@@ -665,9 +819,10 @@ export class Game {
     if (this.viewMode === 'third') desired.y = Math.max(this.world.height(desired.x, desired.z) + 1.25, desired.y);
     this.camera.position.lerp(desired, 1 - Math.exp(-dt * (eyesReady ? 22 : 16)));
     this.camera.lookAt(this.camera.position.clone().addScaledVector(forward, 25));
-    this.character.setFirstPerson(this.viewMode === 'first' && this.heroReady);
-    this.character.root.visible = this.viewMode === 'third' || this.heroReady;
-    this.firstPersonArms.visible = this.viewMode === 'first' && this.state === 'PLAYING' && !this.heroReady;
+    const first = this.viewMode === 'first' && this.state === 'PLAYING';
+    this.character.setFirstPerson(first && this.heroReady);
+    this.character.root.visible = this.state === 'PLAYING' && (this.viewMode === 'third' || this.heroReady);
+    this.firstPersonArms.visible = first && !this.heroReady;
   }
 
   private buildFirstPersonHands(): void {
@@ -703,18 +858,20 @@ export class Game {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.014, 7, 30), this.fpEnergyMaterial.clone());
     ring.position.z = -0.07;
     this.fpEnergy.add(core, halo, ring, this.fpEnergyLight);
-    this.fpEnergy.position.set(0, -0.22, -1.22);
-    this.firstPersonArms.add(this.fpEnergy);
+    this.fpEnergy.position.set(0.16, -0.18, -0.72);
+    this.fpEnergy.visible = false;
+    this.camera.add(this.fpEnergy);
     this.firstPersonArms.visible = false;
     this.camera.add(this.firstPersonArms);
   }
 
   private updateFirstPersonHands(dt: number): void {
-    if (!this.firstPersonArms.visible) return;
+    const first = this.viewMode === 'first' && this.state === 'PLAYING';
     const melee=this.elapsed-this.lastMelee<.27;
-    const blast=this.elapsed-this.lastKiBall<.3;
+    const blast=this.kiBlastHeld || this.elapsed-this.lastKiBall<.35 || Boolean(this.heldSkill);
     const attacking=this.elapsed < this.attackEnd;
-    this.fpEnergy.visible = attacking && !melee;
+    this.fpEnergy.visible = first && blast && !melee;
+    if (!this.firstPersonArms.visible) return;
     if (attacking) {
       const blink = 0.75 + Math.sin(this.elapsed * 24) * 0.15;
       this.fpEnergy.scale.setScalar(blink);
@@ -732,7 +889,12 @@ export class Game {
     this.rightHandRig.position.z = THREE.MathUtils.lerp(this.rightHandRig.position.z,melee ? -.75 : blast ? -.32 : 0, interpolation);
     this.leftHandRig.position.z = THREE.MathUtils.lerp(this.leftHandRig.position.z,melee && this.comboStep===2 ? -.60 : 0,interpolation);
     this.leftHandRig.rotation.x = THREE.MathUtils.lerp(this.leftHandRig.rotation.x, attacking ? -0.35 : 0.05, interpolation);
-    this.rightHandRig.rotation.x = THREE.MathUtils.lerp(this.rightHandRig.rotation.x, attacking ? -0.35 : -0.05, interpolation);
+    this.rightHandRig.rotation.x = THREE.MathUtils.lerp(this.rightHandRig.rotation.x, blast ? -0.12 : attacking ? -0.35 : -0.05, interpolation);
+    this.rightHandRig.rotation.z = THREE.MathUtils.lerp(this.rightHandRig.rotation.z, blast ? -0.08 : 0, interpolation);
+    if (blast) {
+      this.rightHandRig.position.z = THREE.MathUtils.lerp(this.rightHandRig.position.z, -0.38 - Math.sin(this.elapsed * 14) * 0.04, interpolation);
+      this.leftHandRig.position.z = THREE.MathUtils.lerp(this.leftHandRig.position.z, -0.22, interpolation);
+    }
   }
 
   private debugState(): object {

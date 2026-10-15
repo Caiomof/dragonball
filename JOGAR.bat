@@ -83,7 +83,11 @@ if not exist "public\models\anims\ual1.glb" (
     pause
     exit /b 1
 )
-echo [OK] Modelo animado local presente - sem downloads externos.
+echo [OK] Modelo humanoide animado local presente.
+if not exist "public\models\wildlife\wolf.glb" (
+    echo [INFO] Tentando baixar lobo animado gratuito MIT [somente asset 3D]...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest 'https://raw.githubusercontent.com/Ariescar/anyCreature/main/example/wolf.glb' -OutFile 'public\models\wildlife\wolf.glb' -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop; if((Get-Item 'public\models\wildlife\wolf.glb').Length -lt 20000){throw 'Incompleto'}; Write-Host '[OK] Modelo do lobo instalado.' } catch { Write-Host '[AVISO] Lobo externo indisponivel, mantendo fallback.' }"
+)
 
 echo.
 echo [INFO] Iniciando o jogo...

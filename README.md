@@ -1,4 +1,4 @@
-# DRAGON BALL RPG: ORIGENS — v0.1.7
+# DRAGON BALL RPG: ORIGENS — v0.1.14
 
 **Protótipo 3D experimental para Windows 10/11**, feito em TypeScript + Three.js + Vite. O jogo funciona em um servidor local e utiliza WebGL no navegador.
 
@@ -79,3 +79,26 @@ Comandos opcionais para desenvolvedores: `npm test`, `npm run build`.
 - ⚠️ Compilação real Vite/Three.js e testes de gameplay WebGL **não puderam ser executados no ambiente de criação por falta de acesso ao registro npm**. Faça o teste no Windows. Se ocorrer um erro, envie a mensagem do terminal, mais a aba Console (F12) se necessário.
 
 Projeto experimental de fã, sem afiliação ou autorização dos proprietários de Dragon Ball. Para publicação comercial, serão necessárias verificações de direitos sobre a franquia, nomes e personagens.
+
+
+## V0.1.13 — Passe de correção de animações e arte
+
+Esta versão foi alterada **a partir do RAR modificado no Cursor** (base 0.1.12), não da antiga versão distribuída pelo ChatGPT.
+
+- As animações aprovadas de parada, andar, correr e pular continuam mapeadas aos mesmos clips `Idle_Loop`, `Walk_Loop`, `Sprint_Loop`, `Jump_Loop`.
+- Os poderes agora usam de verdade `Spell_Simple_Idle_Loop` / `Spell_Simple_Shoot` e não sobrescrevem o corpo com poses manuais pós-mixer. Durante carregamento, o clip permanece ativo. Voo usa transições e movimentos próprios derivados de clips existentes — **ainda não é uma animação de voo originalmente capturada**, exigindo avaliação visual.
+- Nado usa `Swim_Fwd_Loop` e `Swim_Idle_Loop` da biblioteca existente; a entrada na água é amortecida.
+- Rio é uma **malha contínua** com shader de correnteza, espuma sutil e superfície compartilhada com a física da natação, ao invés de retângulos.
+- Uniforme do personagem humanoide agora é aplicado na textura UV real, com quatro combinações de cores; **não há alteração no esqueleto nem na geometria**. Regenerar com `python scripts/paint_uniform.py` (requer numpy e pillow).
+- Animais: suporte a modelos `.glb` reais em `public/models/wildlife/{wolf,deer}.glb`, com animações se estiverem embutidas. O lobo modelo `anyCreature` MIT pode ser baixado com `INSTALAR_LOBO.bat`. **O GLB do lobo não está embutido no ZIP, e o cervo continua como fallback procedural** até receber um asset autorizado; não declarar os dois animais prontos.
+
+### Teste no Windows
+
+Execute `JOGAR.bat` e confira: caminhada/corrida inalteradas, X carregamento de Ki sustentado, 1–4 animações de conjuração ao segurar e soltar, câmera ao voar, rio e natação, diferença de uniformes por raça. Em caso de falha, envie console F12 e vídeo curto do movimento; a compilação WebGL e a qualidade visual dependem de teste real.
+
+### Licenças e origem
+
+- Quaternius Universal Animation Library — CC0: https://quaternius.com/packs/universalanimationlibrary.html
+- Quaternius Ultimate Animated Animals — CC0: https://quaternius.com/packs/ultimateanimatedanimals.html (sugestão para cervo, não incluído)
+- Wolf anyCreature example — MIT, fonte: https://github.com/Ariescar/anyCreature/blob/main/example/wolf.glb (download opcional)
+

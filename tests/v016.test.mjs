@@ -14,7 +14,7 @@ test('modelo tridimensional rigado e embarcado (sem fallback de rede)',()=>{
   const asset=glbJson();
   assert.ok(asset.nodes.length>60);
   assert.ok(asset.meshes.length>50);
-  assert.deepEqual(asset.animations.map(a=>a.name),['Idle','Walk','Run','Jump','Flight','Punch','Charge']);
+  for(const name of ['Idle','Walk','Run','Jump','Flight','Punch','Charge']) assert.ok(asset.animations.some(a=>a.name===name), name);
   for(const clip of asset.animations){
     assert.ok(clip.channels.length>=8,`animacao curta: ${clip.name}`);
     const destinations=clip.channels.map(c=>`${c.target.node}/${c.target.path}`);
@@ -41,7 +41,8 @@ test('perfis distintos com persistencia no localStorage e aparencia configuravel
 
 test('combate com M1 combo, M2 orb e 1-4 carregamento real',()=>{
   assert.match(game,/event\.button === 0\) this\.punch\(\)/);
-  assert.match(game,/event\.button === 2\) this\.kiBlast\(\)/);
+  assert.match(game,/event\.button === 2\) this\.beginKiBlast\(\)/);
+  assert.match(game,/releaseKiBlast/);
   assert.match(game,/beginCharge\(skill\.id\)/);
   assert.match(game,/this\.releaseCharge\(\)/);
   assert.match(game,/this\.comboStep=/);

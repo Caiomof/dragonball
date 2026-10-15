@@ -1,6 +1,6 @@
 import { SKILLS, type SkillId } from '../data/skills';
 import { RACES } from '../data/gameConfig';
-import { ATTRIBUTE_INFO, type AttributeKey, type Appearance, type PlayerProfile } from '../data/profiles';
+import { ATTRIBUTE_INFO, RACE_APPEARANCE, type AttributeKey, type Appearance, type PlayerProfile } from '../data/profiles';
 import type { FighterStats, GameState, Race, RaceId } from '../data/gameConfig';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -11,8 +11,15 @@ const element = <T extends HTMLElement = HTMLElement>(id: string): T => {
 
 export type UiCallbacks = { start(): void; preview(id: RaceId): void; confirm(): void; back(): void; pause(): void; resume(): void; exit(): void; sound(): void; settings(): void; settingsClose(): void; skills(): void; skillsClose(): void; upgrade(type: AttributeKey, direction: number): void; heroCreate(): void; heroSelect(id: string): void; heroDelete(id: string): void; heroBack(): void; customize(appearance: Appearance, name: string): void; selectSkill(id: SkillId): void; camera(mode: 'first' | 'third'): void; fov(value: number): void; sensitivity(value: number): void };
 
+function mixHex(picked: string, base: string, towardBase = 0.7): string {
+  const channel = (hex: string, index: number) => Number.parseInt(hex.slice(index, index + 2), 16);
+  const mixed = [1, 3, 5].map(index => Math.round(channel(picked, index) * (1 - towardBase) + channel(base, index) * towardBase));
+  return `#${mixed.map(value => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export class Ui {
   selected: RaceId = 'saiyajin';
+  creatorStep: 1 | 2 | 3 = 1;
   private readonly main = element('main-menu');
   private readonly races = element('race-screen');
   private readonly characters = element('character-screen');
@@ -48,22 +55,32 @@ export class Ui {
       if(target.dataset.delete) this.callbacks?.heroDelete(target.dataset.character!);
       else this.callbacks?.heroSelect(target.dataset.character!);
     });
-    for (const id of ['hero-name','hero-height','hero-build','hero-hair','hero-beard','hero-eye','hero-haircolor']) {
+    for (const id of ['hero-name','hero-height','hero-build','hero-hair','hero-beard','hero-beard-style','hero-eye','hero-haircolor']) {
       element(id).addEventListener('input', () => this.emitAppearance());
     }
     element('attribute-editor').addEventListener('click', (event)=>{
       const target=(event.target as HTMLElement).closest<HTMLButtonElement>('[data-attr]');
       if(target) this.callbacks?.upgrade(target.dataset.attr as AttributeKey, Number(target.dataset.direction));
     });
-    element('race-back').addEventListener('click', () => this.callbacks?.back());
+    element('race-back').addEventListener('click', () => {
+      if (this.creatorStep > 1) this.setCreatorStep((this.creatorStep - 1) as 1 | 2 | 3);
+      else this.callbacks?.back();
+    });
+    element('creator-next').addEventListener('click', () => {
+      if (this.creatorStep < 3) this.setCreatorStep((this.creatorStep + 1) as 1 | 2 | 3);
+    });
     element('race-confirm').addEventListener('click', () => this.callbacks?.confirm());
     element('resume-button').addEventListener('click', () => this.callbacks?.resume());
     element('exit-to-menu').addEventListener('click', () => this.callbacks?.exit());
     element('sound-toggle').addEventListener('click', () => this.callbacks?.sound());
-    element('settings-main').addEventListener('click', () => this.callbacks?.settings());
+    document.getElementById('settings-main')?.addEventListener('click', () => this.callbacks?.settings());
     element('open-settings').addEventListener('click', () => this.callbacks?.settings());
     element('settings-close').addEventListener('click', () => this.callbacks?.settingsClose());
-    element('open-skills').addEventListener('click', () => this.callbacks?.skills());
+    document.getElementById('open-skills')?.addEventListener('click', () => this.callbacks?.skills());
+    document.getElementById('sound-settings')?.addEventListener('click', () => this.callbacks?.sound());
+    document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]').forEach(button => {
+      button.addEventListener('click', () => this.showSettingsTab(button.dataset.settingsTab || 'camera'));
+    });
     element('skills-close').addEventListener('click', () => this.callbacks?.skillsClose());
     element('camera-first').addEventListener('click', () => this.callbacks?.camera('first'));
     element('camera-third').addEventListener('click', () => this.callbacks?.camera('third'));
@@ -85,9 +102,10 @@ export class Ui {
       height: Number(element<HTMLInputElement>('hero-height').value)/100,
       build: Number(element<HTMLInputElement>('hero-build').value)/100,
       hair: Number(element<HTMLSelectElement>('hero-hair').value),
-      beard: element<HTMLInputElement>('hero-beard').checked,
-      eyeColor: element<HTMLInputElement>('hero-eye').value,
-      hairColor: element<HTMLInputElement>('hero-haircolor').value
+      beardStyle: Number(element<HTMLSelectElement>('hero-beard-style').value),
+      beard: Number(element<HTMLSelectElement>('hero-beard-style').value) > 0,
+      eyeColor: mixHex(element<HTMLInputElement>('hero-eye').value, RACE_APPEARANCE[this.selected].eyeColor),
+      hairColor: mixHex(element<HTMLInputElement>('hero-haircolor').value, RACE_APPEARANCE[this.selected].hairColor)
     };
     element('height-number').textContent=`${Math.round(appearance.height*100)}%`;
     element('build-number').textContent=`${Math.round(appearance.build*100)}%`;
@@ -99,6 +117,7 @@ export class Ui {
     element<HTMLInputElement>('hero-height').value=String(Math.round(appearance.height*100));
     element<HTMLInputElement>('hero-build').value=String(Math.round(appearance.build*100));
     element<HTMLSelectElement>('hero-hair').value=String(appearance.hair);
+    element<HTMLSelectElement>('hero-beard-style').value=String(appearance.beardStyle ?? (appearance.beard ? 1 : 0));
     element<HTMLInputElement>('hero-beard').checked=appearance.beard;
     element<HTMLInputElement>('hero-eye').value=appearance.eyeColor;
     element<HTMLInputElement>('hero-haircolor').value=appearance.hairColor;
@@ -110,7 +129,7 @@ export class Ui {
     const escape=(text:string)=>text.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
     element('character-list').innerHTML=profiles.length ? profiles.map(p=>{
       const race=RACES.find(r=>r.id===p.race)??RACES[0];
-      return `<article class="character-slot" style="--item-color:${race.accent}"><span class="profile-glyph">${race.symbol}</span><div><strong>${escape(p.name)}</strong><small>${race.name} · Poder ${race.power+p.attributes.power}</small></div><button class="profile-play" data-character="${p.id}" type="button">JOGAR / EDITAR →</button><button class="profile-delete" data-character="${p.id}" data-delete="1" type="button" title="Excluir personagem">✕</button></article>`;
+      return `<article class="character-slot" style="--item-color:${race.accent}"><span class="profile-glyph">${race.symbol}</span><div><strong>${escape(p.name)}</strong><small>${race.name} · Poder ${race.power+p.attributes.power}</small></div><button class="profile-play" data-character="${p.id}" type="button">JOGAR →</button><button class="profile-delete" data-character="${p.id}" data-delete="1" type="button" title="Excluir personagem">✕</button></article>`;
     }).join(''):'<p class="empty-profiles">Nenhum guerreiro criado ainda. O mundo espera por você.</p>';
   }
 
@@ -146,7 +165,45 @@ export class Ui {
       ['VIDA MÁXIMA', race.health, 150, 'health'],
       ['ENERGIA KI', race.ki, 150, 'ki']
     ].map(([label, value, max, color]) => `<div class="stat-row"><span>${label}</span><b>${value}</b><div class="stat-track"><i class="${color}" style="width:${Math.round(Number(value) / Number(max) * 100)}%"></i></div></div>`).join('');
+    this.paintSwatches();
     if (notify) this.callbacks?.preview(id);
+  }
+
+  setCreatorStep(step: 1 | 2 | 3): void {
+    this.creatorStep = step;
+    element('step-race').classList.toggle('hidden', step !== 1);
+    element('step-body').classList.toggle('hidden', step !== 2);
+    element('step-face').classList.toggle('hidden', step !== 3);
+    element('creator-next').classList.toggle('hidden', step === 3);
+    element('race-confirm').classList.toggle('hidden', step !== 3);
+    const stages = ['ETAPA 01 / RAÇA', 'ETAPA 02 / CORPO', 'ETAPA 03 / ROSTO'];
+    const titles = ['ESCOLHA<br /><em>SUA RAÇA.</em>', 'AJUSTE<br /><em>O CORPO.</em>', 'AJUSTE<br /><em>O ROSTO.</em>'];
+    element('creator-stage').textContent = stages[step - 1];
+    element('creator-title').innerHTML = titles[step - 1];
+  }
+
+  private showSettingsTab(name: string): void {
+    document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]').forEach(button => button.classList.toggle('selected', button.dataset.settingsTab === name));
+    document.querySelectorAll<HTMLElement>('[data-settings-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.settingsPanel !== name));
+  }
+
+  private paintSwatches(): void {
+    const base = RACE_APPEARANCE[this.selected];
+    const eyes = [base.eyeColor, mixHex('#88c8ff', base.eyeColor, 0.55), mixHex('#c4552a', base.eyeColor, 0.62)];
+    const hairs = [base.hairColor, mixHex('#f2e2a0', base.hairColor, 0.62), mixHex('#1a1a1a', base.hairColor, 0.55)];
+    const fill = (id: string, colors: string[], inputId: string) => {
+      element(id).innerHTML = colors.map(color => `<button type="button" class="swatch" data-input="${inputId}" data-color="${color}" style="background:${color}"></button>`).join('');
+    };
+    fill('eye-swatches', eyes, 'hero-eye');
+    fill('hair-swatches', hairs, 'hero-haircolor');
+    element('eye-swatches').querySelectorAll<HTMLButtonElement>('.swatch').forEach(button => button.addEventListener('click', () => this.pickSwatch(button)));
+    element('hair-swatches').querySelectorAll<HTMLButtonElement>('.swatch').forEach(button => button.addEventListener('click', () => this.pickSwatch(button)));
+  }
+
+  private pickSwatch(button: HTMLButtonElement): void {
+    const input = element<HTMLInputElement>(button.dataset.input || 'hero-eye');
+    input.value = button.dataset.color || input.value;
+    this.emitAppearance();
   }
 
   state(state: GameState): void {
@@ -192,7 +249,7 @@ export class Ui {
     element('target-health-label').textContent = dummyVisible ? `${dummyHealth} / ${maxDummyHealth}` : 'REGENERANDO...';
     this.target.classList.toggle('destroyed', !dummyVisible);
     this.target.classList.remove('hidden');
-    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · SHIFT ✦' : flying ? '✦ VOANDO · ESPAÇO SOBE · CTRL DESCE ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.1.7';
+    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · GASTA STAMINA ✦' : flying ? '✦ VOANDO · GASTA KI ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.1.14';
     element('hud-bottom-center').textContent = sprintLabel;
   }
 

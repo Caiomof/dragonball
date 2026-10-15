@@ -23,6 +23,7 @@ export class World {
   readonly spawn = new THREE.Vector3(0, 0, 9);
   readonly dummyPosition = new THREE.Vector3(0, 0, -15);
   private readonly clouds: MovingCloud[] = [];
+  private readonly waterShader: THREE.ShaderMaterial;
   private readonly fireflies: THREE.Points;
   private elapsed = 0;
   private readonly breakables: Breakable[] = [];
@@ -31,9 +32,11 @@ export class World {
 
   constructor(scene: THREE.Scene) {
     scene.fog = new THREE.FogExp2(0xa9b8b7, 0.0058);
+    this.waterShader = this.makeRiverMaterial();
     this.addSky(scene);
     this.addLights(scene);
     this.addTerrain();
+    this.addRiver();
     this.addMountains();
     this.addTrees();
     this.addRocks();
@@ -53,7 +56,42 @@ export class World {
     const ridges = Math.sin(x * 0.113 + z * 0.064) * 1.65 + Math.cos(z * 0.117 - x * 0.066) * 1.25;
     const detail = Math.sin(x * 0.31) * Math.sin(z * 0.26) * 0.32;
     const edge = Math.pow(Math.max(0, d - 60) / 60, 1.7) * 12;
-    return (broad + ridges + detail + edge) * flatten;
+    return (broad + ridges + detail + edge) * flatten - this.riverCarve(x, z);
+  }
+
+  private riverCenter(z: number): number {
+    return 24 + Math.sin(z * 0.045) * 5;
+  }
+
+  private riverCarve(x: number, z: number): number {
+    const width = this.riverWidth(z);
+    if (width < 0.35) return 0;
+    const dx = Math.abs(x - this.riverCenter(z));
+    if (dx > width + 1.4) return 0;
+    return (1 - THREE.MathUtils.smoothstep(dx, width * 0.42, width + 0.9)) * 1.55;
+  }
+
+  /** Water surface is shared by render mesh, swimming and collision.
+   *  It never follows the side-to-side terrain height or the old tile seams. */
+  private riverSurface(z: number): number {
+    const x = this.riverCenter(z);
+    return this.rawHeight(x, z) + this.riverCarve(x, z) - 0.73;
+  }
+
+  private riverWidth(z: number): number {
+    const enter = THREE.MathUtils.smoothstep(z, -49, -44);
+    const lake = THREE.MathUtils.smoothstep(z, 16, 30);
+    const leave = 1 - THREE.MathUtils.smoothstep(z, 40, 47);
+    return (3.05 + lake * 13.5) * enter * Math.max(0, leave);
+  }
+
+  inRiver(x: number, z: number): boolean {
+    if (Math.abs(x - this.riverCenter(z)) > this.riverWidth(z)) return false;
+    return this.waterLevel(x, z) - this.height(x, z) > 0.57;
+  }
+
+  waterLevel(_x: number, z: number): number {
+    return this.riverSurface(z);
   }
 
   height(x: number, z: number): number {
@@ -94,6 +132,7 @@ export class World {
       if (entry.obstacle) entry.obstacle.active = true;
       for (const part of entry.parts) { part.mesh.setMatrixAt(part.index, part.transform); part.mesh.instanceMatrix.needsUpdate = true; part.mesh.computeBoundingSphere(); }
     }
+    this.waterShader.uniforms.uTime.value = this.elapsed;
     this.fireflies.rotation.y = this.elapsed * 0.003;
     const material = this.fireflies.material as THREE.PointsMaterial;
     material.opacity = 0.4 + Math.sin(this.elapsed * 1.2) * 0.14;
@@ -154,6 +193,79 @@ export class World {
     const fill = new THREE.DirectionalLight(0x8bc5f7, 0.42);
     fill.position.set(30, 18, 60);
     scene.add(fill);
+  }
+
+  private makeRiverMaterial(): THREE.ShaderMaterial {
+    // One continuous translucent ribbon, subtle travelling ripples and soft foam.
+    return new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      uniforms: { uTime: {value:0} },
+      vertexShader: `varying vec2 vUV; varying vec3 vPos; void main(){
+        vUV=uv; vPos=position;
+        vec3 p=position;
+        p.y+=sin(uv.y*66.0+uv.x*12.0)*0.022;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);
+      }`,
+      fragmentShader: `uniform float uTime; varying vec2 vUV; varying vec3 vPos;
+        void main(){
+          float flow=vUV.y*59.0-uTime*2.0;
+          float ripples=sin(flow+sin(vUV.x*27.0+uTime*.5)*1.6)*.5+.5;
+          float small=sin(vUV.x*92.0+vUV.y*141.0-uTime*3.8)*.5+.5;
+          float shore=pow(abs(vUV.x-.5)*2.0, 3.0);
+          vec3 deep=vec3(.035,.28,.39);
+          vec3 shallow=vec3(.14,.59,.68);
+          vec3 color=mix(deep,shallow,.48+.25*ripples+.09*small);
+          color=mix(color,vec3(.64,.86,.85),shore*.25 + pow(ripples,12.0)*.13);
+          gl_FragColor=vec4(color, mix(.73,.86,shore));
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`
+    });
+  }
+
+  private addRiver(): void {
+    const lengthSegments = 175;
+    const widthSegments = 12;
+    const vertices: number[] = [];
+    const tex: number[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i <= lengthSegments; i++) {
+      const z = -49 + i * (96 / lengthSegments);
+      const center = this.riverCenter(z);
+      const width = this.riverWidth(z);
+      const height = this.riverSurface(z) + 0.045;
+      for (let j = 0; j <= widthSegments; j++) {
+        const across = j / widthSegments;
+        vertices.push(center + (across * 2 - 1) * width, height, z);
+        tex.push(across, i / lengthSegments);
+        if (i < lengthSegments && j < widthSegments) {
+          const a = i*(widthSegments+1)+j, b=a+widthSegments+1;
+          indices.push(a,b,a+1, a+1,b,b+1);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    geometry.setAttribute('uv',new THREE.Float32BufferAttribute(tex,2));
+    geometry.setIndex(indices); geometry.computeVertexNormals();
+    const water = new THREE.Mesh(geometry,this.waterShader);
+    water.name='River — continuous flowing surface';
+    water.frustumCulled = false;
+    water.renderOrder = 1;
+    this.group.add(water);
+    // Foamy banks follow the same spline and are intentionally subtle.
+    const foamMaterial = new THREE.MeshBasicMaterial({color:0xb4d8d4,transparent:true,opacity:.35,depthWrite:false});
+    for(const side of [-1,1]) {
+      const points: THREE.Vector3[]=[];
+      for(let i=2;i<lengthSegments-1;i++) {
+        const z=-49+i*(96/lengthSegments);
+        const width=this.riverWidth(z);
+        points.push(new THREE.Vector3(this.riverCenter(z)+side*width*.94,this.riverSurface(z)+.055,z));
+      }
+      const foam=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),lengthSegments,.035,3,false),foamMaterial);
+      foam.name='River — soft bank foam';
+      this.group.add(foam);
+    }
   }
 
   private addTerrain(): void {

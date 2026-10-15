@@ -18,8 +18,8 @@ const source = file => readFileSync(join(root, file), 'utf8');
 });
 
  test('modelo humanoide rigado esta local no ZIP e dispensa download', () => {
-  assert.match(source('JOGAR.bat'), /origens-warrior\.glb/);
-  assert.match(source('src/characters/Character.ts'), /loadAsync\('\/models\/origens-warrior\.glb'\)/);
+  assert.match(source('JOGAR.bat'), /Superhero_Male_FullBody\.gltf/);
+  assert.match(source('src/characters/Character.ts'), /loadAsync\('\/models\/hero\/Superhero_Male_FullBody\.gltf'\)/);
   assert.ok(existsSync(join(root, 'public/models/origens-warrior.glb')));
 });
 
@@ -47,14 +47,14 @@ const source = file => readFileSync(join(root, file), 'utf8');
   const game = source('src/core/Game.ts');
   assert.match(game, /this\.scene\.add\(this\.camera\)/);
   assert.match(game, /this\.camera\.add\(this\.firstPersonArms\)/);
-  assert.match(game, /this\.fpEnergy\.visible = attacking/);
+  assert.match(game, /this\.fpEnergy\.visible = this\.viewMode/);
   assert.match(game, /this\.viewMode === 'first'\s*\?/);
 });
 
  test('HUD e interface apresentam selecao pelo scroll e marca de versao atual', () => {
   const html = source('index.html');
   assert.match(html, /SCROLL/);
-  assert.match(html, /0\.1\.6/);
+  assert.match(html, /0\.1\.13/);
   assert.match(source('src/ui/Ui.ts'), /highlightSkill/);
   assert.ok(existsSync(join(root, 'JOGAR.bat')));
 });

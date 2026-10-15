@@ -1,4 +1,4 @@
-Dragon Ball RPG: Origens v0.1.7
+Dragon Ball RPG: Origens v0.1.12
 
 O guerreiro texturizado e as animacoes CC0 (Quaternius) ficam em:
   hero/Superhero_Male_FullBody.gltf

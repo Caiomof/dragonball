@@ -19,7 +19,7 @@ export type Race = {
 
 export const RACES: Race[] = raceData as Race[];
 export const ABILITIES = abilityData;
-export const WALK_SPEED = 5;
+export const WALK_SPEED = 2.25;
 export const RUN_SPEED = 9;
 export const JUMP_SPEED = 9;
 export const GRAVITY = 24;
