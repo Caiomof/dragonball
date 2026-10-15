@@ -1,70 +1,86 @@
-# DRAGON BALL RPG: ORIGENS — v0.2.0
+# DRAGON BALL RPG: ORIGENS — POC v0.4.0
 
-Protótipo 3D de aventura e combate em TypeScript, Three.js e Vite, com personagens personalizáveis, três biomas conectados e uma jornada demonstrativa de seis etapas.
+**Jogo 3D para navegador, desenvolvido em TypeScript + Three.js + Vite.** Esta versão evolui diretamente o projeto mais recente enviado pelo usuário; não recomeça do zero.
 
-## Jogar e desenvolver
+## Jogar no Windows
 
-No Windows, extraia a pasta inteira e execute `JOGAR.bat`. Os modelos, animações e uniformes usados pelo jogo estão incluídos. Não é necessário executar os geradores de assets.
+1. Extraia o ZIP inteiro para uma pasta.
+2. Dê dois cliques em **`JOGAR.bat`**. Ele instala dependências do npm quando necessário, inicia o jogo e abre o navegador.
+3. Para encerrar, feche a janela **DragonBallRPG - Servidor**.
 
-Para desenvolvimento, use Node.js 20.19+ (ou 22.12+, recomendado Node 24):
+Na primeira utilização, é necessário ter conexão com a internet para instalar as dependências. O inicializador tenta instalar Node.js LTS via `winget`, caso não esteja presente. Se o Node.js acabou de ser instalado, pode ser preciso abrir `JOGAR.bat` novamente.
 
-```sh
+Alternativamente, com Node.js 20.19+ instalado:
+
+```powershell
 npm ci
 npm run dev
 ```
 
-O servidor usa a porta 5173. Para validar: `npm run check` executa testes e compilação TypeScript/Vite. `npm run preview` serve a compilação na porta 4173. Os dados ficam no armazenamento local da origem do navegador; trocar host, porta ou navegador altera o conjunto de perfis disponível.
+O jogo abre em http://127.0.0.1:5173. Para verificar testes e compilação, rode `npm run check`.
 
-## Novidades da versão
+## Mudanças da v0.4.0
 
-- Cabelos, três estilos de barba e traços raciais ligados ao osso da cabeça; editor com rotação, aproximação e edição dos perfis existentes.
-- Clipes próprios para voo e técnicas, transições, inclinação nas curvas, decolagem, frenagem e recuperação de Ki. Socos aplicam dano no momento do impacto.
-- Animais voltados para o deslocamento, curvas graduais, perseguição/fuga e ataques sujeitos a distância, altura e obstáculos. Cervo articulado incluído em GLB.
-- Planície, deserto e neve em um mundo de 340 × 340 unidades jogáveis, com santuários e objetivos guiados.
-- Leito, margens, superfície e natação calculados a partir das mesmas funções. Lago nivelado, rio contínuo e ondas de contato.
-- Pausa da simulação, derrota e retorno ao checkpoint, carregamento dos recursos, ajustes de qualidade/volume/movimento e migração dos perfis antigos.
+- **Primeira pessoa:** a renderização dos braços usa exclusivamente faces da malha animada ligadas a braços/mãos, sem mostrar o torso e a cabeça inteira diante da câmera. Gestos existentes acompanham socos e técnicas.
+- **Voo:** transições mais suaves de decolagem, pairar, deslocamento e impulso; movimentos sutis de braços/pernas e menor inclinação de míssil.
+- **Personalização:** três cabelos estilizados novos, galeria de seleção e prévia em tempo real; aparência e acessórios existentes preservados.
+- **Combate:** efeitos de Ki com mais partículas, brilho, anéis e definição; técnicas e combos anteriores mantidos.
+- **Criativo / Sobrevivência:** seleção na criação e troca nas configurações; no Criativo, Ki, vida, stamina, técnicas e evolução livres; no Sobrevivência, técnicas e atributos custam Zeni.
+- **Ciclo de RPG:** mochila (I), pequeno mercador na clareira (B, próximo ao NPC), compra, venda, consumíveis, saques de criaturas e contratos de caça (3 ameaças = 160 Zeni).
+- **Inimigos:** mais cervos e lobos distribuídos no mapa, além de dois saqueadores humanoides animados com os recursos já incluídos.
+- **Mundo:** planície, deserto, neve, rios e missões mantidos; névoa excessiva da noite reduzida; velocidade do ciclo dia/noite ajustável no menu.
 
-A jornada começa com três golpes no totem, seis segundos de voo e quatro segundos de natação; continua pelos santuários do deserto e da neve e termina no guardião. O círculo laranja anuncia seu ataque de área: saia dele ou voe para evitar a onda. A direção e a distância do próximo destino aparecem no HUD.
+**Escopo visual real:** os novos cabelos são malhas estilizadas geradas a partir de curvas, não modelos de salão de beleza; o voo e as técnicas continuam usando animações adaptadas ao esqueleto existente. As imagens de conceito em `docs/referencias` indicam a direção artística desejada, **não são capturas do jogo**. O objetivo é consolidar uma POC técnica e jogável, não apresentar gráficos AAA.
 
 ## Controles
 
-| Comando | Efeito |
+| Tecla | Ação |
 |---|---|
-| W A S D / Shift | Caminhar / correr |
-| Mouse | Câmera e mira |
-| Clique esquerdo | Soco / combo |
-| Clique direito, segurar e soltar | Carregar e disparar rajada de Ki |
-| 1, 2, 3, 4, segurar e soltar | Kamehameha, Galick Gun, Masenko, Kienzan |
-| X, segurar | Recuperar Ki usando stamina, em solo |
-| Roda do mouse | Destacar técnica na barra |
-| Espaço | Pular |
-| Dois toques rápidos em Espaço | Ativar/desativar voo |
+| WASD / mouse | Movimentar e mirar |
+| Shift | Correr / impulsionar voo |
+| Espaço | Pular; toque duplo ativa/desativa voo |
 | Espaço / Ctrl durante voo | Subir / descer |
-| V | Primeira / terceira pessoa |
-| K / O | Abrir e fechar atributos / configurações |
-| Esc | Pausar / voltar |
+| Clique esquerdo | Soco / combo |
+| Clique direito (segurar) | Carregar e disparar rajada de Ki |
+| 1 a 6 (segurar) | Carregar técnica selecionada; soltar para executar |
+| X (segurar) | Carregar Ki no chão |
+| V | Alternar primeira / terceira pessoa |
+| Roda do mouse | Selecionar técnica na barra |
+| I | Mochila / inventário |
+| B | Loja do mercador, quando estiver perto (livre no Criativo) |
+| K | Biblioteca / criação de poderes |
+| U | Evolução de atributos |
+| O | Configurações, modos e velocidade do dia |
+| Esc | Fechar menu / pausar |
 | F3 | Diagnóstico |
 
-Os atributos podem ser ajustados gratuitamente com K nesta demonstração. Os perfis salvam aparência, atributos, progresso e checkpoint. Falhas de gravação são exibidas na interface. Apagar os dados do site remove os perfis; não há servidor de contas.
+## Progresso e limitações
 
-## Arquitetura e assets
+- Personagens e seu inventário são armazenados em **`localStorage`** por perfil. Use o mesmo navegador e endereço; limpar dados do site apaga o progresso.
+- A partida é **single-player offline após instalar as dependências**; o código não exige API, banco ou servidor online.
+- O criador de personagens tem quatro raças; algumas características raciais são acessórios estilizados, não anatomias completas diferentes.
+- Animais existentes ainda usam assets de estilos diferentes: cervo e lobo são GLBs articulados, enquanto lebre/escorpião preservam malhas procedurais antigas. O novo saqueador usa o rig humanoide.
+- Não existe loot físico no chão: o item aparece diretamente na mochila ao derrotar uma criatura.
+- Modo Criativo é para testes. Alternar Criativo/Sobrevivência não constitui uma economia à prova de exploits.
+- Há arquivos locais de modelos, texturas e animações. **Não é necessário baixar personagens para jogar.**
 
-- `src/core/Game.ts`: coordenação da partida e entradas.
-- `src/animation/HeroClips.ts`: clipes adicionais construídos sobre uma cópia do esqueleto.
-- `src/characters/Appearance.ts`: acessórios ajustados à geometria da cabeça.
-- `src/world/landscape.ts`: altura, biomas, água e marcos compartilhados.
-- `src/world/World.ts`, `Wildlife.ts`: cenário, colisões e fauna.
-- `src/systems/`: jornada, câmera, relógio de simulação, qualidade e regras de combate.
-- `src/data/profiles.ts`: normalização, migração e armazenamento.
+## Arquitetura para futura migração à Unreal
 
-O humanoide e a biblioteca de animações existentes ficam em `public/models/hero` e `public/models/anims`. Os novos clipes de voo e técnicas são poses articuladas produzidas em código; não são captura de movimento. O cervo é um asset original articulado, gerado por `node scripts/export_deer.mjs` (Node 24). O lobo mantém os clipes `idle` e `move` do asset existente, com reações adicionais de deslocamento/inclinação. O arquivo legado `origens-warrior.glb` não é o humanoide principal carregado nesta versão.
+- `src/systems/RpgLoop.ts`: regras serializáveis de itens, contratos, modos e persistência.
+- `src/world/ShopStall.ts`: mercador e ponto de comércio no cenário.
+- `src/ui/RpgPanels.ts`: telas de mochila e comércio.
+- `src/world/Wildlife.ts`: criaturas, movimentos, combate e saqueadores.
+- `src/animation/HeroClips.ts`: clipes de animações; `src/characters/Character.ts`: avatar e câmera.
+- `src/world/World.ts`: cenário, rios, iluminação e colisões.
+- `src/core/Game.ts`: orquestração de gameplay e entradas.
+- `src/data` e `docs/`: configuração, documentação e design.
 
-Origens/licenças dos recursos existentes: [Universal Animation Library, Quaternius — CC0](https://quaternius.com/packs/universalanimationlibrary.html); [lobo, anyCreature — MIT](https://github.com/Ariescar/anyCreature). Consulte também os avisos incluídos junto aos assets. O cervo novo não depende de download de modelos externos.
+A migração à Unreal vai **reimplementar renderização e código**. As regras, descrições, recursos exportáveis, parâmetros e referências artísticas serão aproveitáveis. Veja `docs/MIGRACAO_UNREAL.md` e `docs/POC_V040.md`.
 
-## Validação
+## Testes
 
-`npm run check` cobre regras, progressão, persistência, câmera, relógio, água, biomas e integridade dos assets. O roteiro automatizado `python tests/smoke_browser.py` exige Python Playwright, Chromium e o servidor de desenvolvimento ativo; ele testa o fluxo completo usando comandos de jogo e realoca o personagem entre pontos distantes por uma ferramenta exclusiva de desenvolvimento. As capturas e o relatório são gravados em `/tmp/origens-smoke` por padrão (`ORIGENS_ARTIFACTS` altera o destino).
+`npm run check` executa os testes Node e a compilação de produção TypeScript/Vite. `python tests/smoke_browser.py` executa um roteiro de navegador se Chromium e Playwright estiverem instalados.
 
-Veja [implementação e limites](docs/IMPLEMENTACAO_V020.md) e [roteiro de avaliação manual](docs/TESTE_MANUAL.md). A validação em Chromium com WebGL por software confirma o fluxo, mas não representa desempenho de GPU nem substitui a avaliação visual e sonora no computador de destino.
+**Limite desta entrega:** o ambiente de criação não pôde acessar o registro npm, então a compilação completa com todas as dependências e o resultado visual WebGL ainda precisam ser confirmados no Windows. Foram verificados a sintaxe TypeScript, integridade dos assets, estrutura HTML e lógica isolada da economia.
 
-Projeto experimental de fã, sem afiliação aos proprietários de Dragon Ball.
+Protótipo experimental inspirado em Dragon Ball, sem afiliação aos detentores da marca. Verifique direitos autorais dos assets e personagens antes de divulgar comercialmente.

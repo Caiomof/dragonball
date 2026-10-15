@@ -21,7 +21,7 @@ with sync_playwright() as p:
   page.goto('http://127.0.0.1:5173/',wait_until='networkidle')
   page.evaluate("localStorage.setItem('dbrpg-origens-settings-v012',JSON.stringify({quality:'low',sound:false}));")
   page.reload(wait_until='networkidle')
-  assert '0.2.0' in page.title()
+  assert '0.3.0' in page.title()
   page.locator('#start-button').click();page.locator('#character-create').click()
   page.locator('#creator-next').click();page.locator('#hero-name').fill('Smoke Aurora');page.locator('#creator-next').click();page.locator('#hero-hair').select_option('2');page.locator('#hero-beard-style').select_option('3')
   wait('window.__DBRPG_DEBUG__().heroReady');page.screenshot(path=str(out/'creator.png'))
@@ -54,10 +54,10 @@ with sync_playwright() as p:
   wait('window.__DBRPG_DEBUG__().progress.final');print('PASS final challenge',flush=True)
   page.keyboard.press('v');page.wait_for_timeout(500);assert state()['mode']=='first';page.screenshot(path=str(out/'first-person.png'));page.keyboard.press('v')
   page.keyboard.press('Escape');wait("window.__DBRPG_DEBUG__().state==='PAUSED'");page.locator('#open-settings').click();page.locator('#quality-select').select_option('medium');page.locator('#settings-close').click();page.locator('#exit-to-menu').click()
-  page.locator('#start-button').click();page.locator('.profile-edit').click();page.locator('#hero-beard-style').select_option('2');page.locator('#race-confirm').click();wait("window.__DBRPG_DEBUG__().state==='PLAYING'")
+  page.locator('#start-button').click();page.locator('.profile-play').click();wait("window.__DBRPG_DEBUG__().state==='PLAYING'")
   page.reload(wait_until='networkidle');page.locator('#start-button').click();page.locator('.profile-play').click();wait("window.__DBRPG_DEBUG__().state==='PLAYING'")
   final=state();assert final['progress']['final'];assert final['quality']=='medium';assert abs(final['position'][0]-43)<1
-  profiles=page.evaluate("JSON.parse(localStorage.getItem('dbrpg-origens-characters-v016'))");assert profiles[0]['appearance']['beardStyle']==2
+  profiles=page.evaluate("JSON.parse(localStorage.getItem('dbrpg-origens-characters-v017'))");assert profiles[0]['appearance']['beardStyle']==3
   # Let real wolf attacks reach defeat, then use the actual checkpoint button.
   for attempt in range(24):
    snapshot=state()

@@ -39,11 +39,7 @@ export class TrainingDummy {
     add(new THREE.TorusGeometry(0.26, 0.067, 8, 24), gold, [0, 2.0, -0.58]);
     add(new THREE.SphereGeometry(0.10, 9, 8), gold, [0, 2.0, -0.63]);
     add(new THREE.ConeGeometry(0.32, 0.55, 5), gold, [0, 2.85, 0]);
-    const barBg = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 0.23), new THREE.MeshBasicMaterial({ color: 0x162a2e, side: THREE.DoubleSide, depthTest: false }));
-    barBg.position.set(0, 3.58, 0);
-    this.group.add(barBg);
-    this.healthFill.position.set(0, 3.58, -0.01);
-    this.group.add(this.healthFill);
+    this.healthFill.visible = false;
     const frame = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.04, 6, 44), new THREE.MeshBasicMaterial({ color: 0xffdb8e, transparent: true, opacity: 0.38 }));
     frame.scale.y = 0.28;
     frame.rotation.x = Math.PI / 2;
@@ -78,7 +74,7 @@ export class TrainingDummy {
     this.healthFill.position.x = 0;
   }
 
-  update(dt: number, camera: THREE.Camera): void {
+  update(dt: number): void {
     if (this.flashRemaining > 0) {
       this.flashRemaining -= dt;
       this.body.scale.setScalar(1 + Math.sin(this.flashRemaining * 48) * 0.06);
@@ -92,15 +88,11 @@ export class TrainingDummy {
         this.healthFill.position.x = 0;
       }
     }
-    this.healthFill.lookAt(camera.position);
-    for (const child of this.group.children) {
-      if (child instanceof THREE.Mesh && child !== this.healthFill && child.position.y > 3) child.lookAt(camera.position);
-    }
   }
 }
 
 export type AttackStyle = 'kamehameha' | 'galick' | 'masenko' | 'kienzan' | 'orb';
-export type AttackVisual = { style: AttackStyle; color: number; core: number; chargeSeconds: number; effectSeconds: number; size?: number };
+export type AttackVisual = { style: AttackStyle; color: number; core: number; chargeSeconds: number; effectSeconds: number; size?: number; blastRadius?: number };
 
 type ActiveEffect = {
   root: THREE.Group;
@@ -121,13 +113,14 @@ type ActiveEffect = {
 
 function softGlowTexture(): THREE.Texture {
   const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
+  canvas.width = 256;
+  canvas.height = 256;
   const ctx = canvas.getContext('2d');
   if (!ctx) return new THREE.Texture();
-  const glow = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  const glow = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
   glow.addColorStop(0, 'rgba(255,255,255,1)');
-  glow.addColorStop(0.22, 'rgba(255,255,255,0.72)');
+  glow.addColorStop(0.16, 'rgba(255,255,255,0.82)');
+  glow.addColorStop(0.29, 'rgba(255,255,255,0.52)');
   glow.addColorStop(0.55, 'rgba(255,255,255,0.22)');
   glow.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = glow;
@@ -166,25 +159,25 @@ export class CombatEffects {
     const charge = new THREE.Group();
     const coreMaterial = new THREE.MeshBasicMaterial({ color: style.core, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.98, toneMapped: false });
     const auraMaterial = new THREE.MeshBasicMaterial({ color: style.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.48, toneMapped: false, side: THREE.DoubleSide });
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), coreMaterial);
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.84, 16, 12), auraMaterial);
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.34, 32, 24), coreMaterial);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.84, 32, 24), auraMaterial);
     charge.add(sphere, halo);
     charge.add(new THREE.PointLight(style.color, 7, 9));
     root.add(charge);
     const body = new THREE.Group();
     const disc = style.style === 'kienzan';
     const orb = style.style === 'orb';
-    const core = new THREE.Mesh(orb ? new THREE.SphereGeometry(.3,20,14):disc ? new THREE.CylinderGeometry(1.05, 1.05, 0.11, 40) : new THREE.CylinderGeometry(0.19, 0.19, 1, 20, 1, true), coreMaterial);
-    const aura = new THREE.Mesh(orb ? new THREE.SphereGeometry(.56,20,14): disc ? new THREE.TorusGeometry(1.04, 0.19, 12, 40) : new THREE.CylinderGeometry(0.48, 0.48, 1, 20, 1, true), auraMaterial);
+    const core = new THREE.Mesh(orb ? new THREE.SphereGeometry(.3,32,24):disc ? new THREE.CylinderGeometry(1.05, 1.05, 0.11, 64) : new THREE.CylinderGeometry(0.19, 0.19, 1, 40, 1, true), coreMaterial);
+    const aura = new THREE.Mesh(orb ? new THREE.SphereGeometry(.56,20,14): disc ? new THREE.TorusGeometry(1.04, 0.19, 18, 64) : new THREE.CylinderGeometry(0.48, 0.48, 1, 40, 1, true), auraMaterial);
     body.add(core, aura);
     const rings: THREE.Mesh[] = [];
-    if (!disc && !orb) for (let i = 0; i < 8; i++) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.04, 8, 24), coreMaterial);
+    if (!disc && !orb) for (let i = 0; i < 10; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.04, 10, 40), coreMaterial);
       ring.rotation.x = Math.PI / 2;
       body.add(ring); rings.push(ring);
     }
     const particles: THREE.Sprite[] = [];
-    for (let i = 0; i < 36; i++) {
+    for (let i = 0; i < 56; i++) {
       const p = this.mote(i % 4 === 0 ? style.core : style.color, 0.22 + (i % 5) * 0.04, 0.72);
       root.add(p);
       particles.push(p);
@@ -237,7 +230,7 @@ export class CombatEffects {
       });
       if (active && progress >= (disc ? 0.68 : 0.23) && !e.hit) {
         e.hit = true;
-        this.impact(e.destination, e.style.color);
+        this.impact(e.destination, e.style.color, e.style.blastRadius ?? 3.2);
         e.onImpact(e.destination);
       }
       if (e.life >= e.style.chargeSeconds + e.style.effectSeconds) {
@@ -273,12 +266,14 @@ export class CombatEffects {
 
   burst(point: THREE.Vector3, color: number): void { this.impact(point, color); }
 
-  private impact(point: THREE.Vector3, color: number): void {
-    const flash = this.mote(color, 2.4, 0.85);
+  private impact(point: THREE.Vector3, color: number, blastRadius = 3.2): void {
+    const scale = 0.75 + blastRadius * 0.28;
+    const flash = this.mote(color, 2.4 * scale, 0.85);
     flash.position.copy(point);
     this.scene.add(flash);
     this.sparks.push({ mesh: flash, velocity: new THREE.Vector3(), life: 0.28, max: 0.28 });
-    for (let i = 0; i < 28; i++) {
+    const sparks = Math.min(48, 14 + Math.round(blastRadius * 5));
+    for (let i = 0; i < sparks; i++) {
       const mesh = this.mote(i % 3 === 0 ? 0xfff4d2 : color, 0.28 + Math.random() * 0.45, 0.9);
       mesh.position.copy(point);
       this.scene.add(mesh);
@@ -288,4 +283,28 @@ export class CombatEffects {
   }
 
   get activeCount(): number { return this.effects.length; }
+
+  clearAll(): void {
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      const e = this.effects[i];
+      this.scene.remove(e.root);
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      e.root.traverse(object => {
+        if (!(object instanceof THREE.Mesh)) return;
+        geometries.add(object.geometry);
+        if (Array.isArray(object.material)) object.material.forEach(m => materials.add(m));
+        else materials.add(object.material);
+      });
+      geometries.forEach(g => g.dispose());
+      materials.forEach(m => m.dispose());
+      this.effects.splice(i, 1);
+    }
+    for (let i = this.sparks.length - 1; i >= 0; i--) {
+      const spark = this.sparks[i];
+      this.scene.remove(spark.mesh);
+      spark.mesh.material.dispose();
+      this.sparks.splice(i, 1);
+    }
+  }
 }

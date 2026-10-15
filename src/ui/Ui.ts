@@ -1,7 +1,8 @@
 import {JOURNEY_STEPS, journeyStage, journeyTarget, type JourneyProgress} from '../systems/Journey';
 import {BIOME_NAMES, biomeAt} from '../world/landscape';
 import type {Quality} from '../systems/Settings';
-import { SKILLS, type SkillId } from '../data/skills';
+import type { CustomPower } from '../data/powers';
+import { powerStats } from '../data/powers';
 import { RACES } from '../data/gameConfig';
 import { ATTRIBUTE_INFO, RACE_APPEARANCE, type AttributeKey, type Appearance, type PlayerProfile } from '../data/profiles';
 import type { FighterStats, GameState, Race, RaceId } from '../data/gameConfig';
@@ -12,7 +13,7 @@ const element = <T extends HTMLElement = HTMLElement>(id: string): T => {
   return found as T;
 };
 
-export type UiCallbacks = { start(): void; preview(id: RaceId): void; confirm(): void; back(): void; pause(): void; resume(): void; exit(): void; sound(): void; settings(): void; settingsClose(): void; skills(): void; skillsClose(): void; upgrade(type: AttributeKey, direction: number): void; heroCreate(): void; heroSelect(id: string): void; heroDelete(id: string): void; heroEdit(id:string):void; respawn():void; quality(value:Quality):void; volume(value:number):void; motion(value:number):void; heroBack(): void; customize(appearance: Appearance, name: string): void; selectSkill(id: SkillId): void; camera(mode: 'first' | 'third'): void; fov(value: number): void; sensitivity(value: number): void };
+export type UiCallbacks = { start(): void; preview(id: RaceId): void; confirm(): void; back(): void; pause(): void; resume(): void; exit(): void; sound(): void; settings(): void; settingsClose(): void; skills(): void; skillsClose(): void; powers(): void; upgrade(type: AttributeKey, direction: number): void; heroCreate(): void; heroSelect(id: string): void; heroDelete(id: string): void; respawn():void; quality(value:Quality):void; volume(value:number):void; motion(value:number):void; heroBack(): void; customize(appearance: Appearance, name: string): void; camera(mode: 'first' | 'third'): void; fov(value: number): void; sensitivity(value: number): void; day(value: number): void; dayAuto(enabled: boolean): void };
 
 function mixHex(picked: string, base: string, towardBase = 0.7): string {
   const channel = (hex: string, index: number) => Number.parseInt(hex.slice(index, index + 2), 16);
@@ -29,7 +30,18 @@ export class Ui {
   private readonly loading = element('loading-screen');
   private readonly hud = element('play-hud');
   private readonly pause = element('pause-screen');
-  setTarget(visible:boolean,guardian:boolean):void {this.target.classList.toggle('hidden',!visible);this.target.querySelector('.target-name')!.textContent=guardian?'GUARDIÃO DA AURORA':'TOTEM DE TREINAMENTO';}
+  setAimFocus(target: { name: string; health: number; maxHealth: number; regenerating?: boolean } | null): void {
+    if (!target) {
+      this.target.classList.add('hidden');
+      return;
+    }
+    this.target.classList.remove('hidden', 'destroyed');
+    this.target.querySelector('.target-name')!.textContent = target.name;
+    const pct = target.maxHealth > 0 ? Math.max(0, target.health / target.maxHealth * 100) : 0;
+    element('target-health-fill').style.width = `${pct}%`;
+    element('target-health-label').textContent = target.regenerating ? 'REGENERANDO…' : `${Math.ceil(target.health)} / ${target.maxHealth}`;
+    this.target.classList.toggle('destroyed', Boolean(target.regenerating));
+  }
   private readonly target = element('target-indicator');
   private readonly toastElement = element('toast');
   private toastDeadline = 0;
@@ -57,12 +69,17 @@ export class Ui {
       const target=(event.target as HTMLElement).closest<HTMLButtonElement>('[data-character]');
       if (!target) return;
       if(target.dataset.delete) this.callbacks?.heroDelete(target.dataset.character!);
-      else if(target.dataset.edit)this.callbacks?.heroEdit(target.dataset.character!);
       else this.callbacks?.heroSelect(target.dataset.character!);
     });
     for (const id of ['hero-name','hero-height','hero-build','hero-hair','hero-beard','hero-beard-style','hero-eye','hero-haircolor']) {
       element(id).addEventListener('input', () => this.emitAppearance());
     }
+    element('hair-gallery').addEventListener('click', event => {
+      const button=(event.target as HTMLElement).closest<HTMLButtonElement>('[data-hair-style]');
+      if(!button)return;
+      element<HTMLSelectElement>('hero-hair').value=button.dataset.hairStyle ?? '0';
+      this.emitAppearance();
+    });
     element('attribute-editor').addEventListener('click', (event)=>{
       const target=(event.target as HTMLElement).closest<HTMLButtonElement>('[data-attr]');
       if(target) this.callbacks?.upgrade(target.dataset.attr as AttributeKey, Number(target.dataset.direction));
@@ -95,10 +112,13 @@ export class Ui {
     element('camera-third').addEventListener('click', () => this.callbacks?.camera('third'));
     element<HTMLInputElement>('fov-slider').addEventListener('input', (event) => this.callbacks?.fov(Number((event.target as HTMLInputElement).value)));
     element<HTMLInputElement>('mouse-slider').addEventListener('input', (event) => this.callbacks?.sensitivity(Number((event.target as HTMLInputElement).value)));
+    element<HTMLInputElement>('day-slider').addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value) / 100;
+      this.paintDay(value);
+      this.callbacks?.day(value);
+    });
+    element<HTMLInputElement>('day-auto').addEventListener('change', (event) => this.callbacks?.dayAuto((event.target as HTMLInputElement).checked));
 
-    const hotbar = element('skill-hotbar');
-    hotbar.innerHTML = SKILLS.map(skill => `<button class="skill-slot ${skill.id === 'kamehameha' ? 'active' : ''}" type="button" data-skill="${skill.id}" style="--skill-color:${skill.color}"><span class="skill-key">${skill.key}</span><span class="skill-icon">${skill.kind === 'disc' ? '◉' : '✦'}</span><span class="skill-name">${skill.short}</span><i class="cooldown-shade"></i></button>`).join('');
-    hotbar.querySelectorAll<HTMLButtonElement>('[data-skill]').forEach(button => button.addEventListener('click', () => this.callbacks?.selectSkill(button.dataset.skill as SkillId)));
     element('about-button').addEventListener('click', () => element('about-dialog').classList.remove('hidden'));
     element('about-close').addEventListener('click', () => element('about-dialog').classList.add('hidden'));
     element('about-ok').addEventListener('click', () => element('about-dialog').classList.add('hidden'));
@@ -107,6 +127,7 @@ export class Ui {
   on(callbacks: UiCallbacks): void { this.callbacks = callbacks; }
 
   private emitAppearance(): void {
+    document.querySelectorAll<HTMLButtonElement>('[data-hair-style]').forEach(button => button.classList.toggle('selected',button.dataset.hairStyle===element<HTMLSelectElement>('hero-hair').value));
     const appearance: Appearance = {
       height: Number(element<HTMLInputElement>('hero-height').value)/100,
       build: Number(element<HTMLInputElement>('hero-build').value)/100,
@@ -130,6 +151,7 @@ export class Ui {
     element<HTMLInputElement>('hero-beard').checked=appearance.beard;
     element<HTMLInputElement>('hero-eye').value=appearance.eyeColor;
     element<HTMLInputElement>('hero-haircolor').value=appearance.hairColor;
+    document.querySelectorAll<HTMLButtonElement>('[data-hair-style]').forEach(button => button.classList.toggle('selected',Number(button.dataset.hairStyle)===appearance.hair));
     element('height-number').textContent=`${Math.round(appearance.height*100)}%`;
     element('build-number').textContent=`${Math.round(appearance.build*100)}%`;
   }
@@ -138,7 +160,7 @@ export class Ui {
     const escape=(text:string)=>text.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
     element('character-list').innerHTML=profiles.length ? profiles.map(p=>{
       const race=RACES.find(r=>r.id===p.race)??RACES[0];
-      return `<article class="character-slot" style="--item-color:${race.accent}"><span class="profile-glyph">${race.symbol}</span><div><strong>${escape(p.name)}</strong><small>${race.name} · Poder ${race.power+p.attributes.power}</small></div><button class="profile-play" data-character="${p.id}" type="button">JOGAR →</button><button class="profile-edit" data-character="${p.id}" data-edit="1" type="button">EDITAR</button><button class="profile-delete" data-character="${p.id}" data-delete="1" type="button" title="Excluir personagem">✕</button></article>`;
+      return `<article class="character-slot" style="--item-color:${race.accent}"><span class="profile-glyph">${race.symbol}</span><div><strong>${escape(p.name)}</strong><small>${race.name} · Poder ${race.power+p.attributes.power}</small></div><button class="profile-play" data-character="${p.id}" type="button">JOGAR →</button><button class="profile-delete" data-character="${p.id}" data-delete="1" type="button" title="Excluir personagem">✕</button></article>`;
     }).join(''):'<p class="empty-profiles">Nenhum guerreiro criado ainda. O mundo espera por você.</p>';
   }
 
@@ -152,6 +174,17 @@ export class Ui {
     element('charge-label').textContent=`CARREGANDO · ${skill.toUpperCase()}`;
     element('charge-fill').style.width=`${Math.min(100,progress*100)}%`;
     element('charge-power').textContent=`${multiplier.toFixed(1)}× PODER`;
+  }
+
+  setDay(value: number, auto: boolean): void {
+    element<HTMLInputElement>('day-slider').value = String(Math.round(value * 100));
+    element<HTMLInputElement>('day-auto').checked = auto;
+    this.paintDay(value);
+  }
+
+  private paintDay(value: number): void {
+    const label = value < 0.18 ? 'NOITE' : value < 0.32 ? 'AMANHECER' : value < 0.68 ? 'DIA' : value < 0.82 ? 'ENTARDECER' : 'NOITE';
+    element('day-value').textContent = label;
   }
 
   showModelNotice(): void {
@@ -196,7 +229,11 @@ export class Ui {
   }
 
   private showSettingsTab(name: string): void {
-    document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]').forEach(button => button.classList.toggle('selected', button.dataset.settingsTab === name));
+    document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]').forEach(button => {
+      const on = button.dataset.settingsTab === name;
+      button.classList.toggle('selected', on);
+      button.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     document.querySelectorAll<HTMLElement>('[data-settings-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.settingsPanel !== name));
   }
 
@@ -222,7 +259,8 @@ export class Ui {
   state(state: GameState): void {
     const views: [HTMLElement, GameState][] = [[this.main, 'MAIN_MENU'], [this.characters, 'CHARACTER_SELECT'], [this.races, 'RACE_SELECTION'], [this.loading, 'LOADING'], [this.hud, 'PLAYING'], [this.pause, 'PAUSED'], [element('defeat-screen'),'DEFEATED']];
     for (const [screen, name] of views) screen.classList.toggle('hidden', state !== name);
-    element('topline').classList.toggle('hidden', state === 'PLAYING' || state === 'PAUSED' || state === 'LOADING');
+    element('topline').classList.toggle('hidden', state === 'PLAYING' || state === 'PAUSED' || state === 'LOADING' || state === 'DEFEATED');
+    element('defeat-screen').classList.toggle('defeat-screen--solo', state === 'DEFEATED');
     element('ui-root').dataset.state = state;
     if (['PAUSED', 'SKILLS'].includes(state)) this.hud.classList.remove('hidden');
     this.settings.classList.toggle('hidden', state !== 'SETTINGS');
@@ -244,7 +282,7 @@ export class Ui {
 
   setLoading(percent: number): void { element('loading-progress').style.width = `${percent}%`; }
 
-  updateHud(stats: FighterStats, abilityReadyIn: number, sprinting: boolean, movingSpeed: number, dummyHealth: number, maxDummyHealth: number, dummyVisible: boolean, race: Race, activeSkill: SkillId = 'kamehameha', cooldowns: Partial<Record<SkillId, number>> = {}, flying = false): void {
+  updateHud(stats: FighterStats, abilityReadyIn: number, sprinting: boolean, movingSpeed: number, race: Race, activePower: CustomPower | null, activeSlot: number, flying = false, powerPotency = 0): void {
     element('hud-race').textContent = race.name.toUpperCase();
     element('hud-power').textContent = String(stats.power);
     element('hud-health-label').textContent = `${Math.ceil(stats.health)} / ${stats.maxHealth}`;
@@ -253,29 +291,25 @@ export class Ui {
     element('hud-ki-fill').style.width = `${Math.max(0, stats.ki / stats.maxKi * 100)}%`;
     element('hud-stamina-label').textContent = `${Math.ceil(stats.stamina)} / ${stats.maxStamina}`;
     element('hud-stamina-fill').style.width = `${Math.max(0, stats.stamina / stats.maxStamina * 100)}%`;
-    const definition = SKILLS.find(skill => skill.id === activeSkill) ?? SKILLS[0];
-    for (const slot of document.querySelectorAll<HTMLElement>('[data-skill]')) {
-      const data = SKILLS.find(skill => skill.id === slot.dataset.skill)!;
-      const cd = Math.max(0, cooldowns[data.id] ?? 0);
-      slot.classList.toggle('active', data.id === activeSkill);
-      const shade = slot.querySelector<HTMLElement>('.cooldown-shade');
-      if (shade) shade.style.height = `${Math.min(100, cd / data.cooldown * 100)}%`;
-      slot.title = `${data.label} · ${data.kiCost} Ki`;
-    }
+    const potency = Math.min(1, Math.max(0, powerPotency));
+    const mult = 1 + potency * 0.9;
+    element('hud-potency-label').textContent = `${Math.round(potency * 100)}% · ${mult.toFixed(1)}×`;
+    element('hud-potency-fill').style.width = `${potency * 100}%`;
+    const statsDef = activePower ? powerStats(activePower) : null;
     element('flight-indicator').classList.toggle('hidden', !flying);
-    element('ability-orb').style.setProperty('--ability-color', definition.color);
-    document.querySelector('.ability-copy strong')!.textContent = definition.short;
+    const color = activePower?.color ?? '#5ec8ff';
+    element('ability-orb').style.setProperty('--ability-color', color);
+    element('ability-symbol').textContent = activePower?.symbol ?? '✦';
+    element('ability-name').textContent = activePower?.name?.toUpperCase() ?? 'VAZIO';
+    element('ability-slot-key').textContent = String(activeSlot + 1);
     const ability = element('ability-orb');
-    ability.style.setProperty('--cooldown', `${Math.round(Math.max(0, 1 - abilityReadyIn / definition.cooldown) * 100)}%`);
+    const cdMax = statsDef?.cooldown ?? 1;
+    ability.style.setProperty('--cooldown', `${Math.round(Math.max(0, 1 - abilityReadyIn / cdMax) * 100)}%`);
     const abilityText = element('ability-status');
-    abilityText.textContent = abilityReadyIn > 0 ? `RECARGA · ${abilityReadyIn.toFixed(1)}s` : stats.ki < definition.kiCost ? 'KI INSUFICIENTE' : `SEGURE ${definition.key} · ${definition.kiCost}+ KI`;
-    ability.classList.toggle('not-ready', abilityReadyIn > 0 || stats.ki < definition.kiCost);
-    const filled = element('target-health-fill');
-    filled.style.width = `${dummyHealth / maxDummyHealth * 100}%`;
-    element('target-health-label').textContent = dummyVisible ? `${dummyHealth} / ${maxDummyHealth}` : 'REGENERANDO...';
-    this.target.classList.toggle('destroyed', !dummyVisible);
-    this.target.classList.remove('hidden');
-    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · GASTA STAMINA ✦' : flying ? '✦ VOANDO · GASTA KI ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.2.0';
+    const kiNeed = statsDef?.kiCost ?? 0;
+    abilityText.textContent = !activePower ? 'K BIBLIOTECA · U HABILIDADES' : abilityReadyIn > 0 ? `RECARGA · ${abilityReadyIn.toFixed(1)}s` : stats.ki < kiNeed ? 'KI INSUFICIENTE' : `SEGURE ${activeSlot + 1} · SOLTE PARA USAR`;
+    ability.classList.toggle('not-ready', Boolean(activePower && (abilityReadyIn > 0 || stats.ki < kiNeed)));
+    const sprintLabel = sprinting && movingSpeed > 0.1 ? '✦ CORRENDO · GASTA STAMINA ✦' : flying ? '✦ VOANDO · GASTA KI ✦' : 'DRAGON BALL RPG ✦ PROTÓTIPO 0.3.0';
     element('hud-bottom-center').textContent = sprintLabel;
   }
 
@@ -288,10 +322,6 @@ export class Ui {
     element('fov-value').textContent = `${fov}°`;
     element<HTMLInputElement>('mouse-slider').value = String(Math.round(sensitivity * 100));
     element('mouse-value').textContent = `${Math.round(sensitivity * 100)}%`;
-  }
-
-  highlightSkill(id: SkillId): void {
-    for (const slot of document.querySelectorAll<HTMLElement>('[data-skill]')) slot.classList.toggle('active', slot.dataset.skill === id);
   }
 
   setAimHit(on: boolean): void { element('aim-reticle').classList.toggle('aim-hit', on); }
@@ -310,10 +340,10 @@ export class Ui {
     }
   }
 
-  floatingDamage(amount: number, x: number, y: number, critical: boolean): void {
+  floatingDamage(amount: number, x: number, y: number, kind: 'object' | 'creature' | 'critical'): void {
     const el = document.createElement('div');
-    el.className = `damage-number ${critical ? 'critical' : ''}`;
-    el.textContent = critical ? 'ALVO DESTRUÍDO!' : `−${amount}`;
+    el.className = `damage-number ${kind}`;
+    el.textContent = kind === 'critical' ? 'ALVO DESTRUÍDO!' : `−${amount}`;
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
     element('combat-number-layer').append(el);

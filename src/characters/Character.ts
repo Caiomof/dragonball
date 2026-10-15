@@ -17,6 +17,7 @@ const CLIP_ALIASES: Record<string, string[]> = {
   flight: ['flight_hover'],
   flighttakeoff: ['flight_takeoff'],
   flightcruise: ['flight_cruise'],
+  flightboost: ['flight_boost', 'flight_cruise'],
   crouch: ['crouch_idle_loop', 'idle_loop'],
   push: ['push_loop', 'spell_simple_idle_loop'],
   kiopen: ['spell_simple_shoot', 'spell_simple_idle_loop', 'beam'],
@@ -74,6 +75,16 @@ function flameTexture(): THREE.CanvasTexture {
 
 const LEG_TRACK = /thigh_|calf_|foot_|ball_|pelvis|(^|\/)root\./i;
 const ARM_TRACK = /upperarm_|lowerarm_|hand_|clavicle_|spine_|neck_|Head|index_|middle_|ring_|pinky_|thumb_/i;
+function fpViewMaterial(source: THREE.Material): THREE.Material {
+  const copy = source.clone();
+  copy.clippingPlanes = null;
+  copy.clipShadows = false;
+  const surface = copy as THREE.MeshStandardMaterial;
+  surface.depthTest = false;
+  surface.depthWrite = false;
+  surface.side = THREE.DoubleSide;
+  return copy;
+}
 
 type Palette = { skin: string; hair: string; top: string; bottom: string; trim: string; boot: string; eye: string };
 
@@ -114,6 +125,7 @@ export class Character {
   private landUntil = 0;
   private activeTechnique: SkillId = 'kamehameha';
   readonly clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  readonly fpAnchor = new THREE.Group();
   private readonly visualStatusListeners: ((ok: boolean) => void)[] = [];
   private loaded = false;
   private animationMode: GestureKind | 'idle' = 'idle';
@@ -127,6 +139,32 @@ export class Character {
   private firstPerson = false;
   private texturedHero = false;
   private readonly handGlows: THREE.Sprite[] = [];
+  private skinnedMesh: THREE.SkinnedMesh | null = null;
+  readonly fpViewRig = new THREE.Group();
+  private fpModel: THREE.Object3D | null = null;
+  private fpSkinned: THREE.SkinnedMesh | null = null;
+  private fpCamera: THREE.Object3D | null = null;
+  private fpScene: THREE.Object3D | null = null;
+  private readonly fpHandsTarget = new THREE.Vector3(0, -0.26, -0.58);
+  private readonly fpHandL = new THREE.Vector3();
+  private readonly fpHandR = new THREE.Vector3();
+  private readonly fpHandMid = new THREE.Vector3();
+  private readonly flightFlames: { sprite: THREE.Sprite; phase: number; lane: number; port: 'left' | 'right' }[] = [];
+  private readonly flightVfx = new THREE.Group();
+  private readonly flightPortL = new THREE.Group();
+  private readonly flightPortR = new THREE.Group();
+  private flightCore: THREE.Sprite | null = null;
+  private readonly flightLight = new THREE.PointLight(0x8fdcff, 0, 7);
+  private footLeft: THREE.Object3D | null = null;
+  private footRight: THREE.Object3D | null = null;
+  private readonly flightAxis = new THREE.Vector3();
+  private readonly flightParentQ = new THREE.Quaternion();
+  private readonly trailL = new THREE.Vector3();
+  private readonly trailR = new THREE.Vector3();
+  private readonly flameAt = new THREE.Vector3();
+  private flightLeg = 0;
+  private takeoffAge = 0;
+  private flightBoost = 0;
   private static outfitTextures = new Map<RaceId, THREE.Texture>();
 
 
@@ -231,6 +269,26 @@ export class Character {
     }
     this.auraLight.position.y = 1.5;
     this.aura.add(this.auraLight);
+    this.flightVfx.visible = false;
+    this.flightPortL.visible = false;
+    this.flightPortR.visible = false;
+    this.flightCore = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: 0xfff6d2, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    this.flightCore.center.set(0.5, 0.5);
+    this.flightVfx.add(this.flightCore);
+    this.flightLight.position.set(0, 0.15, 0.12);
+    this.flightVfx.add(this.flightLight);
+    for (let i = 0; i < 20; i++) {
+      const mat = new THREE.SpriteMaterial({ map: glow, color: 0xb7ecff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.center.set(0.5, 0.12 + (i % 3) * 0.04);
+      const port = i % 2 === 0 ? this.flightPortL : this.flightPortR;
+      port.add(sprite);
+      this.flightFlames.push({ sprite, phase: i / 20, lane: i % 5, port: i % 2 === 0 ? 'left' : 'right' });
+    }
+    this.fpAnchor.frustumCulled = false;
+    this.fpAnchor.visible = false;
+    this.fpAnchor.add(this.fpViewRig);
+    this.fpViewRig.frustumCulled = false;
     this.ready = this.tryLoadModel();
   }
 
@@ -308,7 +366,7 @@ export class Character {
       if(this.destroyed)return false;
       outfit.flipY = false; // glTF UV origin is top-left for this exported model.
       outfit.colorSpace = THREE.SRGBColorSpace;
-      outfit.anisotropy = 4;
+      outfit.anisotropy = 8;
       Character.outfitTextures.set(this.race.id, outfit);
     }
     model.traverse(object => {
@@ -364,14 +422,50 @@ export class Character {
       }
     }
     this.external = model;
+    model.traverse(object => {
+      if (object instanceof THREE.SkinnedMesh && !this.skinnedMesh) this.skinnedMesh = object;
+    });
     this.root.add(model);
+    this.mountFlightVfx();
     this.syncBodyVisibility();
     this.playClip('idle', 0.01);
     this.mixer.update(0.035);
     this.applyAppearance();
     this.loaded = true;
     for (const callback of this.visualStatusListeners) callback(true);
+    if (this.fpCamera) this.rebuildFirstPersonView();
     return true;
+  }
+
+  private mountFlightVfx(): void {
+    this.footLeft = this.external?.getObjectByName('foot_l') ?? null;
+    this.footRight = this.external?.getObjectByName('foot_r') ?? null;
+    const pelvis = this.external?.getObjectByName('pelvis');
+    this.flightPortL.position.set(0, 0.03, 0.05);
+    this.flightPortR.position.set(0, 0.03, 0.05);
+    if (this.footLeft) this.footLeft.add(this.flightPortL);
+    else this.leftLeg.add(this.flightPortL);
+    if (this.footRight) this.footRight.add(this.flightPortR);
+    else this.rightLeg.add(this.flightPortR);
+    if (pelvis) {
+      pelvis.add(this.flightVfx);
+      this.flightVfx.position.set(0, 0.08, 0.04);
+    } else this.external?.add(this.flightVfx);
+  }
+
+  private footBack(foot: THREE.Object3D, out: THREE.Vector3): void {
+    out.set(0, -0.42, 1).applyQuaternion(this.root.quaternion).normalize();
+    foot.getWorldQuaternion(this.flightParentQ).invert();
+    out.applyQuaternion(this.flightParentQ);
+  }
+
+  private applyFlightLife(boost: number, _speed: number, dt: number): void {
+    if (!this.external) return;
+    if (boost > 0.06) this.flightLeg = THREE.MathUtils.damp(this.flightLeg, 0, 10, dt);
+    const ease = 1 - boost * 0.9;
+    const inhale = Math.sin(this.elapsed * 1.05) * 0.0026 * ease;
+    const chest = this.external.getObjectByName('spine_02');
+    if (chest instanceof THREE.Bone && boost < 0.5) chest.rotateX(inhale);
   }
 
   onModelStatus(callback: (ok: boolean) => void): void {
@@ -402,9 +496,15 @@ export class Character {
           if(!('color' in m) || !(m.color instanceof THREE.Color))continue;
           const label = m.name.toUpperCase();
           if (this.texturedHero) {
-            const hairPiece = object.name === 'Eyebrows' || label.includes('HAIR');
+            const hairPiece = object.name === 'Face' || object.name === 'Eyebrows' || label.includes('HAIR');
             const eyePiece = object.name === 'Eyes' || (label.includes('EYE') && !label.includes('EYEBROW'));
-            if (hairPiece) m.color.set(a.hairColor);
+            if (hairPiece) {
+              m.color.set(a.hairColor);
+              if (object.name === 'Face') {
+                const sy = a.hair === 0 ? 1.14 : a.hair === 1 ? 0.86 : 1.06;
+                object.scale.set(1, sy, a.hair === 2 ? 1.08 : 1);
+              }
+            }
             else if (eyePiece) m.color.set(a.eyeColor);
             else m.color.set('#ffffff');
             if (object.name === 'Eyebrows') object.visible = true;
@@ -471,18 +571,191 @@ export class Character {
     return true;
   }
 
-  setFirstPerson(enabled: boolean): void {
-    if(this.firstPerson===enabled)return;
-    this.firstPerson = enabled;
-    this.syncBodyVisibility();
-    this.heroHair.visible = !enabled;
+  mountFirstPersonView(scene: THREE.Object3D, camera: THREE.Object3D): void {
+    this.fpCamera = camera;
+    if (this.fpScene !== scene) {
+      this.fpScene?.remove(this.fpAnchor);
+      this.fpScene = scene;
+      scene.add(this.fpAnchor);
+    }
+    this.rebuildFirstPersonView();
+  }
+
+  private rebuildFirstPersonView(): void {
+    this.disposeFirstPersonView();
     this.external?.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
-      const hideHead = enabled && /^(Face|Eyebrows|Eyes)/.test(object.name);
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) material.clippingPlanes = null;
+    });
+    if (!this.external || !this.skinnedMesh || !this.fpCamera || !this.texturedHero) return;
+    const clone = cloneSkeleton(this.external);
+    clone.traverse(object => {
+      if (object instanceof THREE.Sprite) object.visible = false;
+      if (!(object instanceof THREE.Mesh)) return;
+      object.frustumCulled = false;
+      if (/^(Face|Eyebrows|Eyes)$/i.test(object.name)) {
+        object.visible = false;
+        return;
+      }
+      const sourceMats = Array.isArray(object.material) ? object.material : [object.material];
+      const clonedMats = sourceMats.map(material => fpViewMaterial(material));
+      object.material = Array.isArray(object.material) ? clonedMats : clonedMats[0];
+      object.visible = object instanceof THREE.SkinnedMesh;
+      if (object instanceof THREE.SkinnedMesh) {
+        // First-person view uses only the upper limbs of the SAME skinned model.
+        // Never place the entire torso/head in front of the camera.
+        const armGeometry = Character.firstPersonArmGeometry(object);
+        if (!armGeometry) { object.visible = false; return; }
+        object.geometry = armGeometry;
+        this.fpSkinned = object;
+      }
+    });
+    this.fpModel = clone;
+    this.fpViewRig.position.set(0, 0, 0);
+    this.fpViewRig.rotation.set(0, 0, 0);
+    this.fpViewRig.scale.setScalar(1);
+    this.fpViewRig.frustumCulled = false;
+    this.fpViewRig.add(clone);
+    this.fpViewRig.visible = false;
+    this.fpViewRig.renderOrder = 10;
+    if (this.fpSkinned) {
+      this.fpSkinned.renderOrder = 10;
+      this.fpSkinned.visible = true;
+    }
+    this.calibrateFirstPersonRig();
+  }
+
+  /** Filter triangles by weighted limb bone influence while keeping skeleton, UVs and outfit texture. */
+  private static firstPersonArmGeometry(mesh: THREE.SkinnedMesh): THREE.BufferGeometry | null {
+    const geo = mesh.geometry;
+    const joints = geo.getAttribute('skinIndex');
+    const weights = geo.getAttribute('skinWeight');
+    const positions = geo.getAttribute('position');
+    if (!joints || !weights || !positions) return null;
+    const allowed = new Set<number>();
+    mesh.skeleton.bones.forEach((bone, index) => {
+      if (/(upperarm|lowerarm|forearm|hand|thumb|index|middle|ring|pinky|wrist|clavicle)/i.test(bone.name)) allowed.add(index);
+    });
+    if (allowed.size < 4) return null;
+    const armScore = (i: number): number => {
+      let sum = 0;
+      for (let k = 0; k < 4; k++) if (allowed.has(joints.getComponent(i,k))) sum += weights.getComponent(i,k);
+      return sum;
+    };
+    const source = geo.index?.array;
+    const count = source ? source.length : positions.count;
+    const filtered: number[] = [];
+    for (let i = 0; i + 2 < count; i += 3) {
+      const a = source ? Number(source[i]) : i;
+      const b = source ? Number(source[i+1]) : i+1;
+      const c = source ? Number(source[i+2]) : i+2;
+      // Three full limb vertices: prevents any polygon from torso or face appearing.
+      if (Math.min(armScore(a),armScore(b),armScore(c)) >= 0.42) filtered.push(a,b,c);
+    }
+    if (filtered.length < 30) return null;
+    const clone = geo.clone();
+    clone.setIndex(filtered);
+    clone.clearGroups();
+    clone.addGroup(0,filtered.length,0);
+    clone.computeBoundingSphere();
+    return clone;
+  }
+
+  private measureHandsInCameraSpace(handL: THREE.Bone, handR: THREE.Bone): THREE.Vector3 {
+    this.fpModel?.updateMatrixWorld(true);
+    handL.getWorldPosition(this.fpHandL);
+    handR.getWorldPosition(this.fpHandR);
+    this.fpHandMid.copy(this.fpHandL).add(this.fpHandR).multiplyScalar(0.5);
+    this.fpCamera?.updateMatrixWorld(true);
+    if (this.fpCamera) this.fpCamera.worldToLocal(this.fpHandMid);
+    return this.fpHandMid;
+  }
+
+  private alignFirstPersonHands(handL: THREE.Bone, handR: THREE.Bone): void {
+    const local = this.measureHandsInCameraSpace(handL, handR);
+    this.fpViewRig.position.x += this.fpHandsTarget.x - local.x;
+    this.fpViewRig.position.y += this.fpHandsTarget.y - local.y;
+    this.fpViewRig.position.z += this.fpHandsTarget.z - local.z;
+  }
+
+  private updateFirstPersonAnchor(): void {
+    if (!this.fpCamera) return;
+    this.fpCamera.updateMatrixWorld(true);
+    this.fpAnchor.position.copy(this.fpCamera.position);
+    this.fpAnchor.quaternion.copy(this.fpCamera.quaternion);
+    this.fpAnchor.updateMatrixWorld(true);
+  }
+
+  private calibrateFirstPersonRig(): void {
+    if (!this.fpCamera || !this.fpSkinned) return;
+    this.updateFirstPersonAnchor();
+    this.copyFirstPersonSkeletonFromHero();
+    const handL = this.fpSkinned.skeleton.bones.find(bone => bone.name === 'hand_l');
+    const handR = this.fpSkinned.skeleton.bones.find(bone => bone.name === 'hand_r');
+    if (!handL || !handR) return;
+    this.fpViewRig.position.set(0, 0, 0);
+    this.fpViewRig.rotation.set(0, 0, 0);
+    let local = this.measureHandsInCameraSpace(handL, handR);
+    if (local.z > -0.08) this.fpViewRig.rotation.y = Math.PI;
+    this.alignFirstPersonHands(handL, handR);
+    this.fpViewRig.rotation.x = -0.14;
+    this.alignFirstPersonHands(handL, handR);
+  }
+
+  private disposeFirstPersonView(): void {
+    if (this.fpModel) {
+      this.fpModel.traverse(object => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) material.clippingPlanes = null;
+      });
+      if (this.fpSkinned) this.fpSkinned.geometry.dispose();
+      this.fpViewRig.clear();
+      this.fpModel = null;
+      this.fpSkinned = null;
+    }
+  }
+
+  private copyFirstPersonSkeletonFromHero(): void {
+    if (!this.skinnedMesh || !this.fpSkinned) return;
+    const source = this.skinnedMesh.skeleton.bones;
+    const target = this.fpSkinned.skeleton.bones;
+    for (let i = 0; i < source.length; i++) {
+      target[i].position.copy(source[i].position);
+      target[i].quaternion.copy(source[i].quaternion);
+      target[i].scale.copy(source[i].scale);
+    }
+    this.fpSkinned.skeleton.update();
+  }
+
+  private syncFirstPersonSkeleton(): void {
+    if (!this.firstPerson) return;
+    this.updateFirstPersonAnchor();
+    this.copyFirstPersonSkeletonFromHero();
+  }
+
+  hasFirstPersonView(): boolean {
+    return Boolean(this.fpSkinned);
+  }
+
+  setFirstPerson(enabled: boolean): void {
+    const active = enabled && Boolean(this.fpSkinned);
+    const changed = this.firstPerson !== active;
+    this.firstPerson = active;
+    this.fpViewRig.visible = active;
+    this.fpAnchor.visible = active;
+    if (!changed) return;
+    if (active) this.calibrateFirstPersonRig();
+    this.syncBodyVisibility();
+    this.heroHair.visible = !active;
+    this.external?.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const hideHead = active && /^(Face|Eyebrows|Eyes)/.test(object.name);
       object.visible = !hideHead;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       for (const material of materials) {
-        material.clippingPlanes = enabled ? [this.clipPlane] : null;
+        material.clippingPlanes = null;
         material.clipShadows = true;
       }
     });
@@ -621,30 +894,39 @@ export class Character {
     this.rightArm.rotation.x = sway*.32 + pose*.9;
     this.leftArm.rotation.z = -.10-pose*.12;
     this.rightArm.rotation.z = .10+pose*.12;
-    this.figure.position.y = flying ? Math.sin(this.elapsed * 3.0)*.035 : 0;
-    this.figure.rotation.x = flying ? -.12 : 0;
+    this.figure.position.y = flying ? Math.sin(this.elapsed * 1.15) * 0.008 : 0;
+    this.figure.rotation.x = 0;
     if (this.mixer && this.external) {
       const skillGesture = activeSkill ? Character.castAnimationForSkill(activeSkill) : 'charge';
       const upper = charging ? 'charge' : gestureActive ? (this.animationMode === 'idle' ? skillGesture : this.animationMode) : null;
       const punching = upper === 'punch' || upper === 'punchcross';
       const casting = Boolean(upper && !punching);
       const base = swimming ? (moving ? 'swim' : 'swimidle')
-        : flying ? (flightPhase === 'takeoff' ? 'flighttakeoff' : flightPhase === 'brake' ? 'flight_brake' : moving ? 'flightcruise' : 'flight')
+        : flying ? (flightPhase === 'takeoff' ? 'flighttakeoff' : flightPhase === 'brake' ? 'flight_brake' : moving ? (sprint ? 'flightboost' : 'flightcruise') : 'flight')
         : airborne ? 'jump' : this.elapsed<this.landUntil ? 'jump_land' : locomotion;
       const technique = this.auraMode==='surge' ? 'power_charge' : `charge_${this.activeTechnique}`;
       if(charging&&flying)this.playSplit(base,technique);
       else if(charging)this.playClip(technique,.22);
       else if(punching&&moving&&!airborne&&!swimming)this.playSplit(base,upper!);
       else if(casting)this.playClip(upper==='beam'||upper==='disc'?`release_${this.activeTechnique}`:upper!,.12);
-      else this.playClip(upper ?? base, .23);
-      if(!upper&&!airborne&&!swimming&&moving)this.currentAction?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed/(sprint?7.5:2.25),.7,1.45));
+      else this.playClip(upper ?? base, flying ? 0.55 : .23);
+      if (flying && flightPhase === 'takeoff') this.currentAction?.setEffectiveTimeScale(0.8);
+      else if (flying && flightPhase === 'cruise') this.currentAction?.setEffectiveTimeScale(sprint ? 1.22 : 1.06);
+      else if (flying) this.currentAction?.setEffectiveTimeScale(1.04);
+      else if (swimming && moving) this.currentAction?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 4.2, 0.95, 1.35));
+      else if(!upper&&!airborne&&!swimming&&moving)this.currentAction?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed/(sprint?7.5:2.25),.7,1.45));
       this.mixer.update(Math.min(dt, .05));
-      const flightLean = !flying ? 0 : flightPhase==='takeoff' ? -.20 : flightPhase==='brake' ? .10 : moving ? -.98+THREE.MathUtils.clamp(climb*.025,-.15,.15) : -.06;
+      const targetBoost = flying && sprint && moving ? 1 : 0;
+      this.flightBoost = THREE.MathUtils.damp(this.flightBoost, targetBoost, sprint ? 3.2 : 2.6, dt);
+      if (flying) this.applyFlightLife(this.flightBoost, speed, dt);
+      else this.flightLeg = 0;
+      const missile = this.flightBoost;
+      const flightLean = !flying ? 0 : flightPhase==='takeoff' ? -0.18 : flightPhase==='brake' ? -0.1 : moving ? THREE.MathUtils.lerp(-0.20, -1.05, missile) + THREE.MathUtils.clamp(climb * 0.005, -0.03, 0.03) : -0.08;
       const targetLean = swimming ? -.08 : flightLean;
-      this.external.rotation.x = THREE.MathUtils.damp(this.external.rotation.x, targetLean, 5.0, dt);
-      this.external.rotation.z = THREE.MathUtils.damp(this.external.rotation.z, flying?THREE.MathUtils.clamp(turn,-.35,.35):0,5,dt);
+      this.external.rotation.x = THREE.MathUtils.damp(this.external.rotation.x, targetLean, missile > 0.25 ? 7 : 2.4, dt);
+      this.external.rotation.z = THREE.MathUtils.damp(this.external.rotation.z, flying?THREE.MathUtils.clamp(turn,-.12,.12):0,3.5,dt);
       const h = THREE.MathUtils.clamp(this.appearance.height, 0.78, 1.28);
-      const bob = flying ? Math.sin(this.elapsed * 2.0) * 0.023 : swimming ? Math.sin(this.elapsed * 3.3) * 0.04 : 0;
+      const bob = flying ? (Math.sin(this.elapsed * 1.9) * 0.018 + Math.sin(this.elapsed * 0.7) * 0.014) * (1 - missile * 0.72) : swimming ? Math.sin(this.elapsed * 3.3) * 0.04 : 0;
       this.external.position.y = this.externalBaseY * h + bob;
       for (const glow of this.handGlows) {
         glow.visible = casting || charging;
@@ -654,8 +936,65 @@ export class Character {
         }
       }
       if (!gestureActive && this.animationMode !== 'idle') this.animationMode = 'idle';
+      this.syncFirstPersonSkeleton();
     }
-    const auraOn = this.auraMode !== 'off' || attacking;
+    if (flying && flightPhase === 'takeoff') this.takeoffAge += dt;
+    else this.takeoffAge = 0;
+    const accent = Number.parseInt(this.race.accent.replace('#', ''), 16);
+    const coreColor = accent ^ 0x303030;
+    const boost = this.flightBoost;
+    const cruise = flying ? 0.22 + boost * 0.55 : 0;
+    const showFlightFx = flying && !this.firstPerson;
+    this.flightVfx.visible = showFlightFx;
+    this.flightPortL.visible = showFlightFx;
+    this.flightPortR.visible = showFlightFx;
+    if (showFlightFx) {
+      const lift = flightPhase === 'takeoff' ? 1 - Math.min(1, this.takeoffAge / 0.7) : 0;
+      this.flightLight.intensity = (1.2 + boost * 5.5) * (0.7 + lift * 0.5);
+      this.flightLight.color.setHex(accent);
+      if (this.flightCore) {
+        const pulse = 1 + Math.sin(this.elapsed * (8 + boost * 4)) * 0.04;
+        const wide = THREE.MathUtils.lerp(0.42, 0.7, boost) * pulse;
+        const tall = THREE.MathUtils.lerp(0.75, 0.42, boost) * pulse;
+        this.flightCore.scale.set(wide, tall, 1);
+        this.flightCore.position.set(0, -boost * 0.04, -boost * 0.16);
+        const coreMat = this.flightCore.material as THREE.SpriteMaterial;
+        coreMat.color.setHex(coreColor);
+        coreMat.opacity = cruise + lift * 0.35;
+      }
+      const footL = this.footLeft ?? this.flightPortL;
+      const footR = this.footRight ?? this.flightPortR;
+      if (boost > 0.02) {
+        this.footBack(footL, this.trailL);
+        this.footBack(footR, this.trailR);
+      }
+      for (const flame of this.flightFlames) {
+        const flow = 0.55 + boost * 0.85;
+        const rise = (this.elapsed * flow + flame.phase) % 1;
+        const spread = (flame.lane - 2) * 0.03;
+        this.flameAt.set(spread, rise * 0.08, 0.02 + rise * 0.35);
+        if (boost > 0.02) {
+          const trail = flame.port === 'left' ? this.trailL : this.trailR;
+          const along = 0.05 + rise * 1.45;
+          const wobble = Math.sin(this.elapsed * 2.4 + flame.phase * 8) * 0.035 * rise;
+          this.flightAxis.copy(trail).multiplyScalar(along);
+          this.flightAxis.x += wobble;
+          this.flameAt.lerp(this.flightAxis, boost);
+        }
+        flame.sprite.position.copy(this.flameAt);
+        flame.sprite.center.set(0.5, THREE.MathUtils.lerp(0.14, 0.5, boost));
+        const soft = 0.16 + rise * 0.2;
+        const stretch = (0.32 + rise * 0.45) * (1 + lift * 0.2);
+        const wide = THREE.MathUtils.lerp(0.11 + rise * 0.08, soft, boost);
+        const tall = THREE.MathUtils.lerp(stretch, soft * 1.15, boost);
+        flame.sprite.scale.set(wide, tall, 1);
+        const material = flame.sprite.material as THREE.SpriteMaterial;
+        material.color.setHex(flame.lane % 2 === 0 ? coreColor : accent);
+        material.opacity = Math.pow(1 - rise, 1.15) * (cruise + lift * 0.4) * (0.9 + boost * 0.25);
+      }
+    } else this.flightLight.intensity = 0;
+    const punchingNow = this.animationMode === 'punch' || this.animationMode === 'punchcross';
+    const auraOn = this.auraMode !== 'off' || (attacking && !punchingNow);
     this.aura.visible = auraOn;
     if (auraOn) {
       const surge = this.auraMode === 'surge';
@@ -704,6 +1043,7 @@ export class Character {
 
   dispose(): void {
     this.destroyed = true;
+    this.disposeFirstPersonView();
     disposeAccessories(this.heroHair);
     this.mixer?.stopAllAction();
     if(this.external)this.mixer?.uncacheRoot(this.external);

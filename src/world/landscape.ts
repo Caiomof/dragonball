@@ -14,10 +14,36 @@ export const LANDMARKS = [
  {id:'desert',name:'Santuário das dunas',x:-119,z:-24,color:0xffc279},
  {id:'snow',name:'Farol da aurora',x:43,z:124,color:0xb9d9ff},
 ] as const;
-export const riverCenter = (z: number) => 29+Math.sin(z*.035)*4;
-export function riverWidth(z: number): number { return (4+smooth(2,24,z)*13)*smooth(-62,-53,z)*(1-smooth(44,59,z)); }
-export function waterLevel(z: number): number { return .4 + (1-smooth(-58,9,z))*.7; }
-export function waterFootprint(x: number,z: number): boolean { const w=riverWidth(z); return w>.12 && Math.abs(x-riverCenter(z))<w; }
+export const riverCenter = (z: number) => 22+Math.sin(z*.028)*7;
+export const LAKES = [
+  {x: -6, z: 8, rx: 18, rz: 13, level: 0.28},
+  {x: 62, z: -36, rx: 14, rz: 16, level: 0.16},
+  {x: -42, z: -55, rx: 12, rz: 11, level: 0.34}
+] as const;
+export function riverWidth(z: number): number {
+  const enter = smooth(-108, -92, z);
+  const bulge = Math.max(smooth(-18, 6, z) * (1 - smooth(22, 40, z)), smooth(48, 70, z) * (1 - smooth(78, 96, z)));
+  const leave = 1 - smooth(96, 118, z);
+  return (7.2 + bulge * 16) * enter * Math.max(0, leave);
+}
+function lakeHit(x: number, z: number): { level: number; shore: number } | null {
+  let best: { level: number; shore: number } | null = null;
+  for (const lake of LAKES) {
+    const n = ((x - lake.x) / lake.rx) ** 2 + ((z - lake.z) / lake.rz) ** 2;
+    if (n < 1 && (!best || n < best.shore)) best = { level: lake.level, shore: n };
+  }
+  return best;
+}
+export function waterLevel(z: number, x = 0): number {
+  const lake = lakeHit(x, z);
+  if (lake) return lake.level;
+  return .35 + (1 - smooth(-96, 12, z)) * .75;
+}
+export function waterFootprint(x: number, z: number): boolean {
+  if (lakeHit(x, z)) return true;
+  const w = riverWidth(z);
+  return w > .12 && Math.abs(x - riverCenter(z)) < w;
+}
 export function rawHeight(x: number,z: number): number {
  const w=biomeWeights(x,z);
  const flat=smooth(18,38,Math.hypot(x,z));
@@ -28,10 +54,28 @@ export function rawHeight(x: number,z: number): number {
  // Keep landmarks approachable, with deterministic safe ground under their pads.
  for(const p of LANDMARKS) if(p.id!=='lake') { const d=Math.hypot(x-p.x,z-p.z); const base=p.id==='snow'?9:p.id==='desert'?3:0; h=base+(h-base)*smooth(9,20,d); }
  const width=riverWidth(z); const dx=Math.abs(x-riverCenter(z));
- if(width>.12 && dx<width+5) {
-   const level=waterLevel(z); const shore=dx/width;
-   const bed=level-1.65+1.45*smooth(.55,1,shore);
-   h=shore<=1?bed:bed+(Math.max(h,level+.5)-bed)*smooth(width,width+5,dx);
+ if(width>.12 && dx<width+8) {
+   const level=waterLevel(z, x); const shore=dx/width;
+   const bed=level-1.85+1.5*smooth(.5,1,shore);
+   if(shore<=1) h=bed;
+   else {
+     const bank=level+.72+.55*smooth(1,1.35,shore);
+     h=Math.max(h,bank);
+   }
+ }
+ for (const lake of LAKES) {
+   const nx=(x-lake.x)/lake.rx, nz=(z-lake.z)/lake.rz;
+   const n=nx*nx+nz*nz;
+   if(n>=2.1) continue;
+   const shore=Math.sqrt(n);
+   const water=lake.level;
+   if(n<1) {
+     const bed=water-1.9+1.58*smooth(.4,1,shore);
+     h=bed;
+   } else {
+     const bank=water+.62+.75*smooth(1,1.5,shore);
+     h=Math.max(h,bank);
+   }
  }
  const edge=smooth(151,179,Math.max(Math.abs(x),Math.abs(z)))*15;
  return h+edge;
@@ -45,5 +89,5 @@ export function terrainHeight(x: number,z: number): number {
  const a=rawHeight(x0,z0),b=rawHeight(x0+step,z0),c=rawHeight(x0,z0-step),d=rawHeight(x0+step,z0-step);
  return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
 }
-export function waterDepth(x:number,z:number):number { return waterFootprint(x,z)?Math.max(0,waterLevel(z)-terrainHeight(x,z)):0; }
+export function waterDepth(x:number,z:number):number { return waterFootprint(x,z)?Math.max(0,waterLevel(z,x)-terrainHeight(x,z)):0; }
 export const isSwimming = (x:number,z:number) => waterDepth(x,z)>.75;

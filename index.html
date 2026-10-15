@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a202b" />
     <meta name="description" content="Dragon Ball RPG: Origens — um protótipo de aventura 3D estilizada." />
-    <title>Dragon Ball RPG — Origens · v0.2.0</title>
+    <title>Dragon Ball RPG — Origens · v0.4.0</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
@@ -15,7 +15,7 @@
     <div id="ui-root">
       <header class="topline" id="topline">
         <div class="brand-mark"><span class="brand-icon">✦</span><span>DRAGON BALL <b>RPG</b></span></div>
-        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.2.0</span>
+        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.4.0</span>
         <button id="sound-toggle" class="sound-toggle" type="button" aria-label="Alternar áudio">♫ <span>SOM ON</span></button>
       </header>
 
@@ -40,6 +40,7 @@
         <div class="character-card panel-card"><div class="eyebrow">ARQUIVO DOS GUERREIROS</div><h2>ESCOLHA SUA <em>LENDA.</em></h2>
         <p>Crie vários personagens, experimente estilos e continue do ponto em que parou. Seus guerreiros ficam salvos neste navegador.</p>
         <div id="character-list" class="character-list"></div>
+        <div class="character-mode"><label for="new-character-mode">MODO DA NOVA PARTIDA</label><select id="new-character-mode"><option value="survival">Sobrevivência · evoluir e conquistar</option><option value="creative">Criativo · testar tudo livremente</option></select></div>
         <div class="character-actions"><button id="character-create" type="button" class="button button-primary">✦ CRIAR NOVO GUERREIRO →</button><button id="character-back" type="button" class="button button-subtle">← MENU</button></div>
         </div></section>
       <section id="race-screen" class="screen race-screen hidden" aria-label="Seleção de raça">
@@ -67,7 +68,12 @@
               <label>OLHOS <input id="hero-eye" type="color" value="#45b4e9" /></label>
               <label>CABELO/COR <input id="hero-haircolor" type="color" value="#202436" /></label>
             </div>
-            <p class="creator-tip">Olhos e cabelo ficam perto da cor natural da raça.</p>
+            <div id="hair-gallery" class="hair-gallery" aria-label="Estilos de cabelo">
+              <button type="button" data-hair-style="0" class="hair-preset selected"><span class="hair-glyph wild">♛</span><b>ESPETADO</b></button>
+              <button type="button" data-hair-style="1" class="hair-preset"><span class="hair-glyph short">◕</span><b>CURTO</b></button>
+              <button type="button" data-hair-style="2" class="hair-preset"><span class="hair-glyph wild">✦</span><b>VOLUMOSO</b></button>
+            </div>
+            <p class="creator-tip">Selecione um estilo e veja o cabelo mudar no personagem 3D em tempo real.</p>
             <div id="eye-swatches" class="swatches"></div>
             <div id="hair-swatches" class="swatches"></div>
           </div>
@@ -76,7 +82,7 @@
             <button id="race-confirm" class="button button-primary race-confirm hidden" type="button">SALVAR E JOGAR <span class="button-arrow">→</span></button>
           </div>
         </div>
-        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D ANIMADO · VISUAL V0.2.0</span></div>
+        <div class="race-preview-caption"><div class="eyebrow">PRÉVIA DO GUERREIRO</div><h3 id="preview-name">SAIYAJIN</h3><p id="preview-trait">PODER ELEVADO</p><span class="preview-footnote">PERSONAGEM 3D ANIMADO · VISUAL V0.4.0</span></div>
         <div class="race-stats-panel"><span>ATRIBUTOS INICIAIS</span><div id="race-stat-rows"></div></div>
       </section>
 
@@ -88,43 +94,209 @@
           <div class="resource"><div class="resource-label"><span><b class="dot health-dot"></b> VIDA</span><strong id="hud-health-label">100 / 100</strong></div><div class="resource-track"><div class="resource-fill health-fill" id="hud-health-fill"></div></div></div>
           <div class="resource"><div class="resource-label"><span><b class="dot ki-dot"></b> ENERGIA KI</span><strong id="hud-ki-label">120 / 120</strong></div><div class="resource-track"><div class="resource-fill ki-fill" id="hud-ki-fill"></div></div></div>
           <div class="resource"><div class="resource-label"><span><b class="dot stamina-dot"></b> STAMINA</span><strong id="hud-stamina-label">100 / 100</strong></div><div class="resource-track"><div class="resource-fill stamina-fill" id="hud-stamina-fill"></div></div></div>
+          <div class="resource"><div class="resource-label"><span><b class="dot potency-dot"></b> PODER MÁX.</span><strong id="hud-potency-label">0% · 1.0×</strong></div><div class="resource-track"><div class="resource-fill potency-fill" id="hud-potency-fill"></div></div></div>
+          <div class="resource zeni-resource"><div class="resource-label"><span><b class="dot zeni-dot"></b> ZENI</span><strong id="hud-zeni-label">0 Z</strong></div><div class="resource-track"><div class="resource-fill zeni-fill" id="hud-zeni-fill"></div></div></div>
         </div>
         <div class="world-label"><span class="world-glyph">◇</span><div><span>REGIÃO</span><strong id="region-name">PLANÍCIE ESMERALDA</strong></div><small id="region-surface">CAMPO · EXPLORAÇÃO</small></div>
-        <aside id="journey-panel" class="journey-panel"><span id="journey-count" class="eyebrow">JORNADA · 1 / 6</span><strong id="journey-title"></strong><p id="journey-hint"></p><div id="journey-direction"></div><progress id="journey-progress" max="6" value="0" aria-label="Progresso da jornada"></progress></aside><div class="reticle" id="aim-reticle"><span></span><span></span><span></span><span></span><b></b></div>
-        <div id="target-indicator" class="target-indicator hidden"><span class="target-name">◈ TOTEM DE TREINAMENTO</span><div class="target-bar"><div id="target-health-fill"></div></div><small id="target-health-label">100 / 100</small></div>
+        <aside id="journey-panel" class="journey-panel"><span id="journey-count" class="eyebrow">JORNADA · 1 / 6</span><strong id="journey-title"></strong><p id="journey-hint"></p><div id="journey-direction"></div><progress id="journey-progress" max="6" value="0" aria-label="Progresso da jornada"></progress><div class="journey-actions"><button type="button" id="mission-claim-btn" class="button button-subtle journey-btn">MISSÃO · OBJETOS</button><button type="button" id="journey-boss-btn" class="button button-subtle journey-btn boss-btn">DESAFIAR GUARDIÃO</button></div></aside><div class="reticle" id="aim-reticle"><span></span><span></span><span></span><span></span><b></b></div>
+        <div id="target-indicator" class="target-indicator aim-focus hidden" aria-live="polite"><span class="target-name">ALVO</span><div class="target-bar"><div id="target-health-fill"></div></div><small id="target-health-label">—</small></div>
         <div id="charge-ui" class="charge-ui hidden"><span id="charge-label">CARREGANDO KI</span><div class="charge-track"><i id="charge-fill"></i></div><small id="charge-power">1.0×</small></div>
-        <div class="skill-hotbar" id="skill-hotbar" aria-label="Barra de poderes"></div><div class="flight-indicator hidden" id="flight-indicator">✦ VOO GASTA KI · CORRER GASTA STAMINA</div>
-        <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner">✦</div></div><div class="ability-copy"><span>HABILIDADE ESPECIAL</span><strong>KAMEHAMEHA</strong><small id="ability-status">SEGURE 1–4 · SOLTE PARA DISPARAR</small></div><span class="ability-key">1–4</span></div>
-        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.2.0</div>
+        <div id="venture-hint" class="venture-hint">I · MOCHILA &nbsp; B · LOJA PERTO DO MERCADOR</div><div class="skill-hotbar" id="skill-hotbar" aria-label="Barra de poderes"></div><div class="flight-indicator hidden" id="flight-indicator">✦ VOO GASTA KI · CORRER GASTA STAMINA</div>
+        <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner" id="ability-symbol">✦</div></div><div class="ability-copy"><span>PODER ATIVO</span><strong id="ability-name">—</strong><small id="ability-status">K BIBLIOTECA · 1–6 SEGURE E SOLTE</small></div><span class="ability-key" id="ability-slot-key">1</span></div>
+        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.4.0</div>
         <div id="toast" class="toast hidden" role="status"></div>
         <div id="combat-number-layer"></div>
       </section>
 
-      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">PAUSA</div><h2>JOGO <em>PAUSADO</em></h2><p>Seu progresso está salvo neste navegador.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR</button><button id="open-skills" type="button" class="button button-subtle">LABORATÓRIO DE ATRIBUTOS</button><button id="open-settings" class="button button-subtle" type="button">CONFIGURAÇÕES</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
+      <section id="pause-screen" class="screen pause-screen hidden" aria-label="Jogo pausado"><div class="pause-card"><div class="eyebrow">PAUSA</div><h2>JOGO <em>PAUSADO</em></h2><p>Seu progresso está salvo neste navegador.</p><button id="resume-button" class="button button-primary" type="button">CONTINUAR</button><button id="open-settings" class="button button-subtle" type="button">CONFIGURAÇÕES</button><button id="exit-to-menu" class="button button-subtle" type="button">VOLTAR AO MENU</button></div></section>
       <section id="settings-screen" class="screen panel-screen hidden" aria-label="Configurações do jogo">
-        <div class="panel-card"><div class="eyebrow">AJUSTE SUA EXPERIÊNCIA</div><h2>CONFIGURAÇÕES</h2>
-        <div class="settings-tabs"><button type="button" data-settings-tab="camera" class="selected">CÂMERA</button><button type="button" data-settings-tab="controls">CONTROLES</button><button type="button" data-settings-tab="audio">ÁUDIO</button></div>
-        <div data-settings-panel="camera">
-          <label class="panel-label">VISÃO</label><div class="panel-toggle"><button type="button" id="camera-third" class="selected">TERCEIRA PESSOA</button><button type="button" id="camera-first">PRIMEIRA PESSOA</button></div>
-          <label class="panel-label" for="fov-slider">CAMPO DE VISÃO <strong id="fov-value">70°</strong></label><input id="fov-slider" type="range" min="55" max="105" step="1" value="70"/>
-          <label class="panel-label" for="mouse-slider">SENSIBILIDADE DO MOUSE <strong id="mouse-value">100%</strong></label><input id="mouse-slider" type="range" min="45" max="190" step="5" value="100"/>
+        <div class="panel-card settings-card rpg-frame game-modal-shell">
+          <div class="eyebrow">AJUSTES</div>
+          <h2>CONFIGURAÇÕES</h2>
+          <div class="settings-shell">
+            <div class="tab-stack">
+            <nav class="rpg-tabs settings-tabs" role="tablist" aria-label="Seções de configuração">
+              <button type="button" role="tab" aria-selected="true" data-settings-tab="camera" class="selected"><span class="tab-glyph">◇</span>CÂMERA</button>
+              <button type="button" role="tab" aria-selected="false" data-settings-tab="controls"><span class="tab-glyph">⌨</span>CONTROLES</button>
+              <button type="button" role="tab" aria-selected="false" data-settings-tab="audio"><span class="tab-glyph">♫</span>ÁUDIO</button>
+              <button type="button" role="tab" aria-selected="false" data-settings-tab="economy"><span class="tab-glyph">✦</span>MODO DE JOGO</button>
+            </nav>
+            <div class="rpg-tab-body settings-tab-body">
+              <div data-settings-panel="camera" class="settings-panel rpg-scroll" role="tabpanel">
+                <label class="panel-label">VISÃO</label><div class="panel-toggle"><button type="button" id="camera-third" class="selected">TERCEIRA PESSOA</button><button type="button" id="camera-first">PRIMEIRA PESSOA</button></div>
+                <label class="panel-label" for="fov-slider">CAMPO DE VISÃO <strong id="fov-value">70°</strong></label><input id="fov-slider" type="range" min="55" max="105" step="1" value="70"/>
+                <label class="panel-label" for="mouse-slider">SENSIBILIDADE DO MOUSE <strong id="mouse-value">100%</strong></label><input id="mouse-slider" type="range" min="45" max="190" step="5" value="100"/>
+                <label class="panel-label" for="motion-slider">MOVIMENTO DA CÂMERA (BALANÇO) <strong id="motion-value">65%</strong></label><input id="motion-slider" type="range" min="0" max="100" value="65" />
+                <label class="panel-label">QUALIDADE GRÁFICA</label><select id="quality-select" class="settings-select"><option value="low">Leve</option><option value="medium" selected>Equilibrada</option><option value="high">Alta</option></select>
+                <label class="panel-label" for="day-slider">HORA DO DIA <strong id="day-value">DIA</strong></label><input id="day-slider" type="range" min="0" max="100" value="38"/>
+                <label class="rpg-check">
+                  <input id="day-auto" class="rpg-check-input" type="checkbox"/>
+                  <span class="rpg-check-box" aria-hidden="true"></span>
+                  <span class="rpg-check-label">Passagem automática do dia e da noite</span>
+                </label>
+                <p class="settings-lead">No jogo, <kbd>[</kbd> e <kbd>]</kbd> também adiantam ou voltam a hora.</p>
+              </div>
+              <div data-settings-panel="controls" class="settings-panel rpg-scroll hidden" role="tabpanel">
+                <p class="settings-lead">Cada ação no jogo — tecla ou botão correspondente.</p>
+                <div class="bindings-panel">
+                  <div class="binding-group"><h4>Movimento</h4>
+                    <ul class="binding-rows">
+                      <li><span class="binding-action">Andar</span><span class="binding-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></li>
+                      <li><span class="binding-action">Correr</span><span class="binding-keys"><kbd>Shift</kbd></span></li>
+                      <li><span class="binding-action">Pular</span><span class="binding-keys"><kbd>Espaço</kbd></span></li>
+                      <li><span class="binding-action">Voar</span><span class="binding-keys"><kbd>Espaço</kbd><span class="binding-plus">×2</span></span></li>
+                    </ul>
+                  </div>
+                  <div class="binding-group"><h4>Combate</h4>
+                    <ul class="binding-rows">
+                      <li><span class="binding-action">Soco</span><span class="binding-keys"><kbd class="wide">M1</kbd></span></li>
+                      <li><span class="binding-action">Bola de ki</span><span class="binding-keys"><kbd class="wide">M2</kbd></span></li>
+                      <li><span class="binding-action">Poderes equipados</span><span class="binding-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd></span></li>
+                      <li><span class="binding-action">Carregar poder máx.</span><span class="binding-keys"><kbd>X</kbd></span></li>
+                      <li><span class="binding-action">Descarregar</span><span class="binding-keys"><kbd>C</kbd></span></li>
+                    </ul>
+                  </div>
+                  <div class="binding-group"><h4>Câmera</h4>
+                    <ul class="binding-rows">
+                      <li><span class="binding-action">Olhar</span><span class="binding-keys"><kbd class="wide">Mouse</kbd></span></li>
+                      <li><span class="binding-action">Alternar visão</span><span class="binding-keys"><kbd>V</kbd></span></li>
+                      <li><span class="binding-action">Trocar slot do poder</span><span class="binding-keys"><kbd class="wide">Scroll</kbd></span></li>
+                    </ul>
+                  </div>
+                  <div class="binding-group"><h4>Menus</h4>
+                    <ul class="binding-rows">
+                      <li><span class="binding-action">Pausa</span><span class="binding-keys"><kbd>Esc</kbd></span></li>
+                      <li><span class="binding-action">Biblioteca de poderes</span><span class="binding-keys"><kbd>K</kbd></span></li>
+                      <li><span class="binding-action">Árvore de habilidades</span><span class="binding-keys"><kbd>U</kbd></span></li>
+                      <li><span class="binding-action">Configurações</span><span class="binding-keys"><kbd>O</kbd></span></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div data-settings-panel="audio" class="settings-panel rpg-scroll hidden" role="tabpanel">
+                <label class="panel-label" for="volume-slider">VOLUME GERAL <strong id="volume-value">65%</strong></label><input id="volume-slider" type="range" min="0" max="100" value="65" />
+                <p class="settings-lead">Liga ou desliga efeitos e ambiente.</p><button id="sound-settings" type="button" class="button button-subtle">ALTERNAR SOM</button>
+              </div>
+              <div data-settings-panel="economy" class="settings-panel rpg-scroll hidden" role="tabpanel">
+                <label class="panel-label" for="game-mode-select">MODO DE JOGO</label>
+                <select id="game-mode-select" class="settings-select"><option value="survival">SOBREVIVÊNCIA · recursos limitados</option><option value="creative">CRIATIVO · vida, Ki, stamina e dinheiro infinitos</option></select>
+                <p class="settings-lead">Criativo serve para testar poderes e explorar. Sobrevivência exige coleta, combate e compras.</p>
+                <label class="panel-label" for="day-speed-select">VELOCIDADE DO DIA/NOITE</label>
+                <select id="day-speed-select" class="settings-select"><option value="0.25">Muito lento · 0,25×</option><option value="0.5">Lento · 0,5×</option><option value="1">Normal · 1×</option><option value="2">Rápido · 2×</option><option value="4">Muito rápido · 4×</option><option value="8">Ultra · 8×</option></select>
+                <p class="settings-lead">Alterações salvas individualmente em cada personagem.</p>
+                <div class="hidden" aria-hidden="true">
+                <p class="settings-lead">Ajuste de protótipo — saldo e ganho de Zeni.</p>
+                <label class="panel-label" for="zeni-set-input">SALDO ATUAL</label>
+                <div class="zeni-row"><input id="zeni-set-input" class="settings-input" type="number" min="0" max="99999" value="0"/><button id="zeni-set-btn" type="button" class="button button-subtle">APLICAR</button></div>
+                <label class="panel-label" for="zeni-mult">MULTIPLICADOR DE GANHO</label>
+                <select id="zeni-mult" class="settings-select"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="5">5×</option></select>
+                <div class="zeni-quick"><button type="button" id="zeni-add-500" class="button button-subtle">+500</button><button type="button" id="zeni-add-2000" class="button button-subtle">+2000</button><button type="button" id="zeni-zero" class="button button-subtle">ZERAR</button></div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+          <button id="settings-close" type="button" class="button button-primary">VOLTAR AO JOGO</button>
         </div>
-        <div class="settings-extra"><label>QUALIDADE <select id="quality-select"><option value="low">Leve</option><option value="medium" selected>Equilibrada</option><option value="high">Alta</option></select></label><label>MOVIMENTO DA CÂMERA <input id="motion-slider" type="range" min="0" max="100" value="65" /></label><label>VOLUME <input id="volume-slider" type="range" min="0" max="100" value="65" /></label></div><div data-settings-panel="controls" class="hidden control-list">
-          <p><b>WASD</b> mover · <b>Shift</b> correr (stamina) · <b>Espaço</b> pular · <b>Espaço duas vezes</b> voar (ki)</p>
-          <p><b>Mouse</b> câmera · <b>M1</b> soco · <b>M2</b> bola de ki (segure para crescer)</p>
-          <p><b>1–4</b> carregar poder · <b>X</b> concentrar e recuperar Ki · <b>K</b> atributos · <b>SCROLL</b> alterna poder · <b>V</b> visão · <b>Esc</b> pausa</p>
+      </section>
+      <section id="rpg-venture-panel" class="venture-overlay hidden" aria-label="Inventário e mercador" role="dialog" aria-modal="true">
+        <div class="venture-card">
+          <header class="venture-head"><div><span class="eyebrow">DRAGON BALL RPG · ORIGENS</span><h2 id="rpg-venture-title">MOCHILA</h2><p id="rpg-venture-subtitle">Seus recursos coletados.</p></div><div><strong id="rpg-venture-zeni">0 ZENI</strong><button type="button" class="venture-close" data-rpg-close="1">✕ FECHAR</button></div></header>
+          <div class="venture-items" id="rpg-venture-items"></div>
+          <div id="rpg-contract" class="rpg-contract hidden"></div>
+          <footer class="venture-foot">Inventário: <kbd>I</kbd> · Loja próxima ao mercador: <kbd>B</kbd> · Fechar: <kbd>Esc</kbd></footer>
         </div>
-        <div data-settings-panel="audio" class="hidden"><p>O som ambiente e os efeitos da luta podem ser ligados ou desligados.</p><button id="sound-settings" type="button" class="button button-subtle">ALTERNAR SOM</button></div>
-        <button id="settings-close" type="button" class="button button-primary">VOLTAR</button></div>
       </section>
-      <section id="skills-screen" class="screen panel-screen hidden" aria-label="Evolução do personagem">
-        <div class="panel-card skill-tree"><div class="eyebrow">SEU POTENCIAL</div><h2>CAMINHO <em>DO GUERREIRO</em></h2>
-        <p>Ajuste seus atributos livremente, sem pontos ou custos. Os valores afetam imediatamente o jogo e são salvos no seu personagem.</p>
-        <div id="attribute-editor" class="attribute-editor"></div>
-        <p class="skill-note">✦ Laboratório de evolução: clique em − ou + para testar combinações e volte ao mapa com K.</p>
-        <button id="skills-close" type="button" class="button button-primary">VOLTAR AO JOGO →</button></div>
+      <section id="skills-screen" class="screen panel-screen hidden" aria-label="Árvore de habilidades">
+        <div class="panel-card skill-tree skills-modal-card rpg-frame game-modal-shell">
+          <header class="skills-modal-head">
+            <div class="skills-modal-badge" aria-hidden="true">⬡</div>
+            <div>
+              <div class="eyebrow">EVOLUÇÃO DO GUERREIRO</div>
+              <h2>ÁRVORE DE <em>HABILIDADES</em></h2>
+              <p class="skills-lead">Aqui você <strong>fortalece o corpo e a técnica</strong> — vida, ki, stamina e poder de luta. Isso deixa os poderes da hotbar mais letais. Para <strong>criar, comprar e equipar</strong> técnicas novas, abra a <strong>Biblioteca</strong> com <kbd>K</kbd>.</p>
+            </div>
+            <div class="skills-zeni"><span class="zeni-tag">ZENI</span><strong id="skills-zeni-label">0 Z</strong></div>
+          </header>
+          <div class="skills-divider" aria-hidden="true"></div>
+          <div class="skills-body rpg-scroll">
+            <div id="attribute-editor" class="attribute-editor attribute-tree"></div>
+          </div>
+          <p class="skill-note">✦ Use − e + para combinar atributos. Tecla <kbd>U</kbd> fecha e volta ao mapa.</p>
+          <button id="skills-close" type="button" class="button button-primary">VOLTAR AO JOGO →</button>
+        </div>
       </section>
-      <section id="defeat-screen" class="screen panel-screen hidden"><div class="panel-card"><div class="eyebrow">UM NOVO FÔLEGO</div><h2>O TREINO <em>CONTINUA.</em></h2><p>Você caiu em combate. Sua jornada e aparência foram preservadas.</p><button id="respawn-button" class="button button-primary" type="button">VOLTAR AO ÚLTIMO SANTUÁRIO</button></div></section><div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.2.0</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Crie seu guerreiro, domine os poderes e explore a Planície Esmeralda, as Dunas do Sol e a Serra da Aurora.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
+      <div id="power-library-screen" class="power-modal hidden" role="dialog" aria-modal="true" aria-label="Biblioteca de poderes">
+        <div class="power-modal-card rpg-frame library-frame game-modal-shell">
+          <header class="power-modal-head power-modal-head--compact">
+            <div>
+              <span class="eyebrow">PODERES</span>
+              <h2>BIBLIOTECA</h2>
+              <p class="power-lib-lead">Monte os 6 slots abaixo. Compre <strong>técnicas</strong> para desbloquear formatos de disparo antes de forjar.</p>
+            </div>
+            <div class="power-zeni"><span class="zeni-tag">ZENI</span><strong id="power-zeni-label">0 Z</strong></div>
+            <button type="button" id="power-library-close" class="close-modal" aria-label="Fechar">×</button>
+          </header>
+          <div class="library-equip-bar" id="library-equip-bar" aria-label="Slots da hotbar"></div>
+          <p class="library-equip-hint">Arraste um poder da lista para um dos <strong>6 slots</strong> acima. Você também pode mover entre slots.</p>
+          <nav class="library-main-tabs" aria-label="Seções">
+            <button type="button" class="library-main-tab selected" id="library-tab-owned" data-tab="owned">Meus poderes</button>
+            <button type="button" class="library-main-tab" id="library-tab-shop" data-tab="shop">Comprar técnica</button>
+          </nav>
+          <div class="library-body rpg-scroll">
+            <section id="library-panel-owned" class="library-panel" aria-label="Meus poderes">
+              <button type="button" id="power-create-new" class="button button-primary library-create-hero">+ Criar novo poder</button>
+              <p class="library-create-lead">Forje um poder com cor, símbolo e tamanho depois de desbloquear o tipo na aba Comprar técnica.</p>
+              <div id="power-owned-list" class="power-owned-grid"></div>
+            </section>
+            <section id="library-panel-shop" class="library-panel hidden" aria-label="Comprar técnica">
+              <div class="library-shop-filters" id="power-shop-filter-tabs" role="tablist">
+                <button type="button" class="shop-filter-chip selected" data-filter="all">Todos</button>
+                <button type="button" class="shop-filter-chip" data-filter="attack">Ataque</button>
+                <button type="button" class="shop-filter-chip" data-filter="movement">Movimento</button>
+                <button type="button" class="shop-filter-chip" data-filter="technique">Técnicas</button>
+              </div>
+              <div id="power-shop-grid" class="power-shop-grid"></div>
+            </section>
+          </div>
+        </div>
+      </div>
+      <div id="power-creator-screen" class="power-modal power-creator-modal hidden" role="dialog" aria-modal="true" aria-label="Criar poder">
+        <div class="creator-compact rpg-frame">
+          <header class="creator-head">
+            <div><span class="eyebrow">FORJA RÁPIDA</span><strong id="power-creator-title">Novo poder</strong></div>
+            <button type="button" id="power-creator-cancel" class="close-modal" aria-label="Fechar">×</button>
+          </header>
+          <div class="creator-layout">
+            <aside class="creator-preview-pane">
+              <div class="creator-preview-stage" id="power-preview-stage">
+                <canvas id="power-preview-canvas" class="creator-preview-canvas" aria-label="Preview do disparo"></canvas>
+              </div>
+              <p class="creator-preview-hint" id="power-preview-type-hint">Guerreiro de exemplo em 3ª pessoa — disparo real no alvo.</p>
+              <dl class="creator-stat-grid">
+                <div><dt>Dano</dt><dd id="stat-damage">—</dd></div>
+                <div><dt>Alcance</dt><dd id="stat-range">—</dd></div>
+                <div><dt>Ki</dt><dd id="stat-ki">—</dd></div>
+                <div><dt>Acerto</dt><dd id="stat-hit">—</dd></div>
+                <div class="creator-stat-wide"><dt>Área de impacto</dt><dd id="stat-blast">—</dd></div>
+              </dl>
+              <p id="power-creator-summary" class="creator-summary muted"></p>
+            </aside>
+            <div class="creator-form rpg-scroll">
+              <label class="creator-field" for="power-creator-name">Nome<input id="power-creator-name" class="settings-input" maxlength="20" autocomplete="off" /></label>
+              <label class="creator-field" for="power-creator-type">Tipo<select id="power-creator-type" class="settings-select"></select></label>
+              <label class="creator-field">Símbolo<div id="power-symbol-grid" class="symbol-grid symbol-grid-compact"></div></label>
+              <label class="creator-field" for="power-creator-size">Tamanho <strong id="power-creator-size-label">Médio</strong><input id="power-creator-size" type="range" min="0" max="4" value="2" /></label>
+              <div class="creator-colors"><label for="power-creator-color">Cor</label><input id="power-creator-color" type="color" value="#5ec8ff" /><label for="power-creator-core">Núcleo</label><input id="power-creator-core" type="color" value="#dff6ff" /></div>
+            </div>
+          </div>
+          <footer class="creator-foot">
+            <span class="creator-cost">Custo <strong id="power-creator-cost">400 Z</strong></span>
+            <button type="button" id="power-creator-save" class="button button-primary">SALVAR PODER</button>
+          </footer>
+        </div>
+      </div>
+      <section id="defeat-screen" class="screen panel-screen hidden"><div class="panel-card"><div class="eyebrow">UM NOVO FÔLEGO</div><h2>O TREINO <em>CONTINUA.</em></h2><p>Você caiu em combate. Sua jornada e aparência foram preservadas.</p><button id="respawn-button" class="button button-primary" type="button">VOLTAR AO ÚLTIMO SANTUÁRIO</button></div></section><div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.4.0</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Crie seu guerreiro, domine os poderes e explore a Planície Esmeralda, as Dunas do Sol e a Serra da Aurora.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

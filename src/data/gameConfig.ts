@@ -2,7 +2,7 @@ import raceData from './races.json';
 import abilityData from './abilities.json';
 
 export type RaceId = 'saiyajin' | 'terraqueo' | 'namekuseijin' | 'majin';
-export type GameState = 'MAIN_MENU' | 'CHARACTER_SELECT' | 'RACE_SELECTION' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'SETTINGS' | 'SKILLS' | 'DEFEATED';
+export type GameState = 'MAIN_MENU' | 'CHARACTER_SELECT' | 'RACE_SELECTION' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'SETTINGS' | 'SKILLS' | 'POWERS' | 'DEFEATED';
 export type Race = {
   id: RaceId;
   name: string;

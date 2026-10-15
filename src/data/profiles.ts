@@ -1,10 +1,56 @@
 import {newJourney, type JourneyProgress} from '../systems/Journey';
 import type { RaceId } from './gameConfig';
+import {
+  type CustomPower,
+  type PowerTypeId,
+  ZENI_START,
+  defaultLoadout,
+  defaultUnlocked,
+  legacySeedPowers,
+  LOADOUT_SLOTS,
+} from './powers';
 
 export type AttributeKey = 'health' | 'ki' | 'stamina' | 'power' | 'kiRegen' | 'speed' | 'flight';
 export type AttributeLevels = Record<AttributeKey, number>;
 export type Appearance = { height: number; build: number; hair: number; beard: boolean; beardStyle: number; eyeColor: string; hairColor: string };
-export type PlayerProfile = { id: string; name: string; race: RaceId; appearance: Appearance; attributes: AttributeLevels; createdAt: number; schemaVersion: 2; progress: JourneyProgress; checkpoint: 'training' | 'desert' | 'snow' };
+export type PowerEconomy = {
+  zeni: number;
+  zeniGainMult: number;
+  unlockedTypes: PowerTypeId[];
+  powers: CustomPower[];
+  loadout: (string | null)[];
+  breaks: number;
+  beasts: number;
+  bossCooldownUntil: number;
+  missionDone: boolean;
+};
+
+export type PlayerProfile = {
+  id: string;
+  name: string;
+  race: RaceId;
+  appearance: Appearance;
+  attributes: AttributeLevels;
+  createdAt: number;
+  schemaVersion: 3;
+  progress: JourneyProgress;
+  checkpoint: 'training' | 'desert' | 'snow';
+  economy: PowerEconomy;
+};
+
+export function defaultEconomy(): PowerEconomy {
+  return {
+    zeni: ZENI_START,
+    zeniGainMult: 1,
+    unlockedTypes: defaultUnlocked(),
+    powers: legacySeedPowers(),
+    loadout: defaultLoadout(),
+    breaks: 0,
+    beasts: 0,
+    bossCooldownUntil: 0,
+    missionDone: false,
+  };
+}
 
 export const ATTRIBUTE_INFO: { id: AttributeKey; label: string; desc: string; step: number; min: number; max: number }[] = [
   {id:'health', label:'Vida máxima', desc:'Mais resistência em combate',step:25,min:50,max:1500},
@@ -16,7 +62,7 @@ export const ATTRIBUTE_INFO: { id: AttributeKey; label: string; desc: string; st
   {id:'flight',label:'Domínio de voo',desc:'Velocidade e controle no ar',step:0.15,min:0.4,max:2.5}
 ];
 export const BASE_ATTR = {health:0,ki:0,stamina:100,power:0,kiRegen:6.2,speed:1,flight:1} as const;
-const STORAGE_KEY = 'dbrpg-origens-characters-v016';
+const STORAGE_KEY = 'dbrpg-origens-characters-v017';
 export const DEFAULT_APPEARANCE: Appearance = {height:1,build:1,hair:0,beard:false,beardStyle:0,eyeColor:'#45b4e9',hairColor:'#202436'};
 export const RACE_APPEARANCE: Record<RaceId, Appearance> = {
   saiyajin: { height: 1.06, build: 1.12, hair: 0, beard: false, beardStyle: 0, eyeColor: '#1c2438', hairColor: '#141820' },
@@ -25,7 +71,43 @@ export const RACE_APPEARANCE: Record<RaceId, Appearance> = {
   majin: { height: 0.96, build: 1.18, hair: 2, beard: false, beardStyle: 0, eyeColor: '#4a2848', hairColor: '#f0a0c4' }
 };
 export function makeProfile(race: RaceId = 'saiyajin'): PlayerProfile {
-  return {id:(typeof crypto!=='undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `ch_${Date.now()}_${Math.floor(Math.random()*1e6)}`),name:'Novo guerreiro',race,appearance:{...RACE_APPEARANCE[race]},attributes:{health:0,ki:0,stamina:100,power:0,kiRegen:6.2,speed:1,flight:1},createdAt:Date.now(),schemaVersion:2,progress:newJourney(),checkpoint:'training'};
+  return {
+    id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `ch_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+    name: 'Novo guerreiro',
+    race,
+    appearance: { ...RACE_APPEARANCE[race] },
+    attributes: { health: 0, ki: 0, stamina: 100, power: 0, kiRegen: 6.2, speed: 1, flight: 1 },
+    createdAt: Date.now(),
+    schemaVersion: 3,
+    progress: newJourney(),
+    checkpoint: 'training',
+    economy: defaultEconomy(),
+  };
+}
+
+function normalizeEconomy(raw: unknown): PowerEconomy {
+  const e = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const def = defaultEconomy();
+  const powers = Array.isArray(e.powers) ? e.powers.filter(p => p && typeof p === 'object') as CustomPower[] : def.powers;
+  const loadout = Array.isArray(e.loadout)
+    ? e.loadout.slice(0, LOADOUT_SLOTS).map(v => (typeof v === 'string' ? v : null))
+    : def.loadout;
+  while (loadout.length < LOADOUT_SLOTS) loadout.push(null);
+  const unlocked = Array.isArray(e.unlockedTypes)
+    ? e.unlockedTypes.filter(t => typeof t === 'string') as PowerTypeId[]
+    : def.unlockedTypes;
+  if (!unlocked.includes('ball')) unlocked.unshift('ball');
+  return {
+    zeni: finite(e.zeni, def.zeni, 0, 99999),
+    zeniGainMult: finite(e.zeniGainMult, 1, 1, 5),
+    unlockedTypes: unlocked,
+    powers: powers.length ? powers.slice(0, 12) : legacySeedPowers(),
+    loadout,
+    breaks: Math.floor(finite(e.breaks, 0, 0, 999)),
+    beasts: Math.floor(finite(e.beasts, 0, 0, 999)),
+    bossCooldownUntil: finite(e.bossCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
+    missionDone: e.missionDone === true,
+  };
 }
 const finite=(v:unknown, fallback:number,min:number,max:number):number=>typeof v==='number'&&Number.isFinite(v)?Math.max(min,Math.min(max,v)):fallback;
 const color=(v:unknown,fallback:string):string=>typeof v==='string'&&/^#[0-9a-f]{6}$/i.test(v)?v:fallback;
@@ -37,7 +119,25 @@ export function normalizeProfile(value:unknown):PlayerProfile|null {
  const beardStyle=Math.round(finite(a.beardStyle,a.beard?1:0,0,3));
  const appearance:Appearance={height:finite(a.height,base.appearance.height,.94,1.12),build:finite(a.build,base.appearance.build,.9,1.18),hair:Math.round(finite(a.hair,0,0,2)),beard:beardStyle>0,beardStyle,eyeColor:color(a.eyeColor,base.appearance.eyeColor),hairColor:color(a.hairColor,base.appearance.hairColor)};
  for(const key of Object.keys(base.attributes) as AttributeKey[]){const spec=ATTRIBUTE_INFO.find(s=>s.id===key)!;const isBonus=['health','ki','power'].includes(key);base.attributes[key]=finite(attrs[key],base.attributes[key],isBonus?0:spec.min,isBonus?spec.max-1:spec.max);}
- return {...base,id:x.id,name:typeof x.name==='string'?x.name.trim().slice(0,28)||'Guerreiro':'Guerreiro',appearance,createdAt:finite(x.createdAt,Date.now(),0,Date.now()),checkpoint:['desert','snow'].includes(x.checkpoint)?x.checkpoint:'training',progress:{training:Math.floor(finite(progress.training,0,0,3)),flight:finite(progress.flight,0,0,6),swim:finite(progress.swim,0,0,4),desert:progress.desert===true,snow:progress.snow===true,final:progress.final===true}};
+ const economy = normalizeEconomy(x.economy ?? (x.schemaVersion === 2 ? null : undefined));
+ return {
+   ...base,
+   id: x.id,
+   name: typeof x.name === 'string' ? x.name.trim().slice(0, 28) || 'Guerreiro' : 'Guerreiro',
+   appearance,
+   createdAt: finite(x.createdAt, Date.now(), 0, Date.now()),
+   schemaVersion: 3,
+   checkpoint: ['desert', 'snow'].includes(x.checkpoint) ? x.checkpoint : 'training',
+   progress: {
+     training: Math.floor(finite(progress.training, 0, 0, 3)),
+     flight: finite(progress.flight, 0, 0, 6),
+     swim: finite(progress.swim, 0, 0, 4),
+     desert: progress.desert === true,
+     snow: progress.snow === true,
+     final: progress.final === true,
+   },
+   economy,
+ };
 }
 export function loadProfiles():PlayerProfile[]{
  try{const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');if(!Array.isArray(saved))return [];const ids=new Set<string>();return saved.slice(0,32).map(normalizeProfile).filter((p):p is PlayerProfile=>Boolean(p&&!ids.has(p.id)&&ids.add(p.id)));}

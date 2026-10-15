@@ -18,21 +18,28 @@ export function createHeroClips(source:THREE.Group,library:THREE.AnimationClip[]
   bone.quaternion.copy(parent.multiply(world));bone.updateMatrixWorld(true);
  };
  const clips:THREE.AnimationClip[]=[];
- const names=['flight_hover','flight_cruise','flight_takeoff','flight_brake','power_charge','charge_kamehameha','charge_galick','charge_masenko','charge_kienzan','release_kamehameha','release_galick','release_masenko','release_kienzan'];
+ const names=['flight_hover','flight_cruise','flight_boost','flight_takeoff','flight_brake','power_charge','charge_kamehameha','charge_galick','charge_masenko','charge_kienzan','release_kamehameha','release_galick','release_masenko','release_kienzan'];
  for(const name of names){
-  const release=name.startsWith('release');const duration=release?.55:name==='flight_takeoff'?.55:2.4;
+  const release=name.startsWith('release');const duration=release?.55:name==='flight_takeoff'?1.15:2.4;
   const times=Array.from({length:17},(_,i)=>i/16*duration);
   const rotations=new Map<string,number[]>(),positions=new Map<string,number[]>();
   for(const t of times){
    action.reset();mixer.setTime(0.4);rig.updateMatrixWorld(true);
-   const breath=Math.sin(t/duration*Math.PI*2)*.025;
    const flight=name.startsWith('flight');
+   const breath=Math.sin(t/duration*Math.PI*2)*(flight?.01:.025);
    for(const side of ['l','r']){
     const sign=side==='l'?1:-1;
     let upper=new THREE.Vector3(sign*.25,-.95,.15),lower=new THREE.Vector3(sign*.1,-.9,.3);
-    if(name==='flight_cruise'){upper.set(sign*.13,-.9,-.42);lower.set(sign*.07,-.98,.04);}
-    else if(name==='flight_takeoff'){upper.set(sign*.25,-.78,-.2);lower.set(sign*.2,-.75,.45);}
-    else if(name==='flight_brake'){upper.set(sign*.45,-.5,.65);lower.set(sign*.05,-.25,.97);}
+    if(name==='flight_hover'||name==='flight_cruise'||name==='flight_takeoff'){
+      const sway=Math.sin(t/duration*Math.PI*2)*.012;
+      upper.set(sign*.1,-.97+sway,-.04);
+      lower.set(sign*.04,-.98,-.02);
+    }
+    else if(name==='flight_boost'){
+      upper.set(sign*.07,-.99,-.01);
+      lower.set(sign*.025,-.995,-.005);
+    }
+    else if(name==='flight_brake'){upper.set(sign*.16,-.9,.08);lower.set(sign*.06,-.95,.02);}
     else if(name==='power_charge'){upper.set(sign*.52,-.8,.15);lower.set(-sign*.12,-.55,.8);}
     else if(!flight){
      if(name.includes('masenko')){upper.set(sign*.55,.6,.5);lower.set(-sign*.4,.65,.65);}
@@ -43,9 +50,15 @@ export function createHeroClips(source:THREE.Group,library:THREE.AnimationClip[]
     }
     upper.y+=breath;aim(`upperarm_${side}`,`lowerarm_${side}`,upper);aim(`lowerarm_${side}`,`hand_${side}`,lower);
     // Slightly flexed knees and spread stance for balance; never overwrite mixer bones at runtime.
-    if(flight||name==='power_charge'){
-     aim(`thigh_${side}`,`calf_${side}`,new THREE.Vector3(sign*.13,-1,flight?-.12:.18));
-     aim(`calf_${side}`,`foot_${side}`,new THREE.Vector3(0,-1,flight?-.18:-.22));
+    if(name==='flight_hover'||name==='flight_cruise'||name==='flight_takeoff'){
+     aim(`thigh_${side}`,`calf_${side}`,new THREE.Vector3(sign*.09,-.99,-.06 + Math.sin(t/duration*Math.PI*2+(side==='l'?0:Math.PI))*.09));
+     aim(`calf_${side}`,`foot_${side}`,new THREE.Vector3(0,-.99,-.025));
+    } else if(name==='flight_boost'){
+     aim(`thigh_${side}`,`calf_${side}`,new THREE.Vector3(sign*.015,-1,-.01 + Math.sin(t/duration*Math.PI*2+(side==='l'?0:Math.PI))*.04));
+     aim(`calf_${side}`,`foot_${side}`,new THREE.Vector3(0,-1,0));
+    } else if(name==='power_charge'){
+     aim(`thigh_${side}`,`calf_${side}`,new THREE.Vector3(sign*.13,-1,.18));
+     aim(`calf_${side}`,`foot_${side}`,new THREE.Vector3(0,-1,-.22));
     }
    }
    for(const bone of bones){

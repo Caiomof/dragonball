@@ -33,17 +33,50 @@ export function buildAccessories(model:THREE.Group,head:THREE.Object3D,a:Appeara
   const o=new THREE.Mesh(geometry,material);o.position.set(x,y,z);o.scale.set(sx,sy,sz);o.castShadow=true;root.add(o);return o;
  };
  if(race==='saiyajin'||race==='terraqueo'){
-  const cap=mesh(new THREE.SphereGeometry(1,20,12,0,Math.PI*2,0,Math.PI*.53),hair,center.x,top-size.y*.25,center.z,width*1.06,size.y*(a.hair===1?.27:.34),depth*1.04);
-  cap.name='HairCap';
-  const locks=a.hair===1?9:a.hair===2?13:10;
-  for(let i=0;i<locks;i++){
-   const theta=i/locks*Math.PI*2;
-   const length=size.y*(a.hair===0?.55:a.hair===2?.34:.13)*(1+(i%3)*.12);
-   const lock=mesh(new THREE.ConeGeometry(width*.36,length,5),hair,center.x+Math.cos(theta)*width*.65,top+length*.20,center.z+Math.sin(theta)*depth*.6);
-   lock.rotation.z=-Math.cos(theta)*(a.hair===0?.55:.85);lock.rotation.x=Math.sin(theta)*.5;
-   lock.name=`HairLock${i}`;
+  // Real custom tapered meshes, fitted to the actual skinned head; no spheres/cones pretending to be hair.
+  // A root clump has six-sided sections and bends along an authored Bézier-like strand path.
+  const shade=new THREE.MeshStandardMaterial({color:a.hairColor,roughness:.82,flatShading:false,metalness:.02});
+  const cap=mesh(new THREE.SphereGeometry(1,28,14,0,Math.PI*2,0,Math.PI*.51),shade,center.x,top-size.y*.16,center.z,width*1.08,size.y*.47,depth*1.13);
+  cap.name='HairScalp';
+  const many=a.hair===1?14:a.hair===2?26:20;
+  const createClump=(points:THREE.Vector3[],thick:number,shapeId:number)=>{
+    const positions:number[]=[],normals:number[]=[],colors:number[]=[],indices:number[]=[];
+    const segments=9,sides=7;
+    const spline=new THREE.CatmullRomCurve3(points);
+    const col=new THREE.Color(a.hairColor);
+    for(let i=0;i<=segments;i++){
+      const t=i/segments,at=spline.getPoint(t),tangent=spline.getTangent(t).normalize();
+      const axis=new THREE.Vector3(0,0,1);
+      if(Math.abs(tangent.dot(axis))>.94)axis.set(0,1,0);
+      const side1=new THREE.Vector3().crossVectors(tangent,axis).normalize();
+      const side2=new THREE.Vector3().crossVectors(tangent,side1).normalize();
+      const radius=thick*(.16+.84*Math.pow(1-t, .8));
+      for(let j=0;j<sides;j++){
+        const a0=j/sides*Math.PI*2,rad1=Math.cos(a0)*radius,rad2=Math.sin(a0)*radius*.55;
+        const point=at.clone().addScaledVector(side1,rad1).addScaledVector(side2,rad2);
+        positions.push(point.x,point.y,point.z);
+        const tint=col.clone().multiplyScalar(.78+.22*Math.cos(a0)+.07*(shapeId%3));
+        colors.push(tint.r,tint.g,tint.b);normals.push(0,1,0);
+        if(i<segments){const a=i*sides+j,b=i*sides+(j+1)%sides,c=(i+1)*sides+j,d=(i+1)*sides+(j+1)%sides;indices.push(a,c,b,b,c,d);}
+      }
+    }
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.setIndex(indices);g.computeVertexNormals();
+    const m=shade.clone();m.vertexColors=true;m.side=THREE.DoubleSide;
+    const part=mesh(g,m,0,0,0);part.name=`HairStrand_${shapeId}`;
+  };
+  for(let i=0;i<many;i++){
+    const ring=i%3,theta=i/many*Math.PI*2+ring*.12;
+    const spread=a.hair===1?.68:a.hair===2?1.0:1.18;
+    const length=size.y*(a.hair===1?.24:a.hair===2?.48:.42)*(0.75+0.32*Math.sin(i*11.7)**2);
+    const x=Math.cos(theta),z=Math.sin(theta);
+    const base=new THREE.Vector3(center.x+x*width*(.48+ring*.16),top-size.y*.21,center.z+z*depth*(.58+ring*.10));
+    const swoop=a.hair===1?.08:a.hair===2?.18:.24;
+    const points=[base,base.clone().add(new THREE.Vector3(x*width*.23,length*.35,z*depth*.22)),base.clone().add(new THREE.Vector3(x*width*spread*.72+swoop*size.y*.15,length*.82,z*depth*.61)),base.clone().add(new THREE.Vector3(x*width*spread+swoop*size.y*.28,length,z*depth*.78))];
+    if(a.hair===1){points[2].y-=length*.35;points[3].y-=length*.66;}
+    if(a.hair===2){points[2].x+=Math.sin(i*2.27)*width*.28;points[3].x+=Math.sin(i*2.27)*width*.33;}
+    createClump(points,size.x*(a.hair===1?.14:.115),i);
   }
-  const style=a.beardStyle;
+  const style=a.beardStyle ?? (a.beard ? 1 : 0);
   if(style>0){
    // A tapered jaw surface follows the cheeks instead of adding round facial blobs.
    const vertices:number[]=[],indices:number[]=[],segments=24,rings=5;
