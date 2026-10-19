@@ -40,8 +40,8 @@ export class RpgLoop {
  amount(id:ItemId){return this.data.inventory[id]??0;}
  add(id:ItemId,quantity:number){this.data.inventory[id]=Math.max(0,Math.min(999,this.amount(id)+Math.floor(quantity)));this.save();}
  loot(kind:string):Item {
-  const id:ItemId=kind==='wolf'?'fang':kind==='deer'?'pelt':kind==='scorpion'?'chitin':kind==='hare'?'venison':kind==='bandit'?'insignia':'herbs';
-  if(!this.creative){this.add(id,1);this.data.victories++;if(['wolf','scorpion','bandit'].includes(kind))this.data.bounty=Math.min(3,this.data.bounty+1);this.save();}
+  const id:ItemId=kind==='wolf'?'fang':kind==='deer'?'pelt':kind==='scorpion'?'chitin':kind==='hare'?'venison':kind==='bandit'?'insignia':kind==='cow'||kind==='horse'?'venison':kind==='bull'?'fang':'herbs';
+  if(!this.creative){this.add(id,1);this.data.victories++;if(['wolf','scorpion','bandit','orc','blob'].includes(kind))this.data.bounty=Math.min(3,this.data.bounty+1);this.save();}
   return ITEMS.find(item=>item.id===id)!;
  }
  purchase(id:ItemId,zeni:number):{ok:boolean;zeni:number;message:string}{

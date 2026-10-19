@@ -2,28 +2,45 @@
 export const WORLD_HALF = 170;
 export const TERRAIN_SEGMENTS = 280;
 export const TERRAIN_WIDTH = WORLD_HALF * 2 + 20;
-export type Biome = 'plains' | 'desert' | 'snow';
+export type Biome = 'plains' | 'desert' | 'snow' | 'crimson';
 export const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 export function smooth(a: number, b: number, n: number): number { const t = clamp((n-a)/(b-a),0,1); return t*t*(3-2*t); }
-export function biomeWeights(x: number,z: number) { const snow=smooth(58,100,z); const desert=smooth(42,85,-x)*(1-snow); return {snow,desert,plains:1-snow-desert}; }
-export function biomeAt(x: number,z: number): Biome { const w=biomeWeights(x,z); return w.snow>.5?'snow':w.desert>.5?'desert':'plains'; }
-export const BIOME_NAMES: Record<Biome,string> = {plains:'PLANÍCIE ESMERALDA',desert:'DUNAS DO SOL',snow:'SERRA DA AURORA'};
+export function biomeWeights(x: number, z: number) {
+  const snow = smooth(58, 100, z);
+  const desert = smooth(42, 85, -x) * (1 - snow);
+  const crimson = smooth(42, 85, x) * (1 - snow);
+  const plains = Math.max(0, 1 - snow - desert - crimson);
+  return { snow, desert, crimson, plains };
+}
+export function biomeAt(x: number, z: number): Biome {
+  const w = biomeWeights(x, z);
+  if (w.snow > 0.5) return 'snow';
+  if (w.desert > 0.5) return 'desert';
+  if (w.crimson > 0.5) return 'crimson';
+  return 'plains';
+}
+export const BIOME_NAMES: Record<Biome, string> = {
+  plains: 'PLANÍCIE ESMERALDA',
+  desert: 'DUNAS DO SOL',
+  snow: 'SERRA DA AURORA',
+  crimson: 'CALDEIRA CRIMSON',
+};
+export function regionLabel(x: number, z: number): string {
+  return BIOME_NAMES[biomeAt(x, z)];
+}
 export const LANDMARKS = [
  {id:'training',name:'Clareira do despertar',x:0,z:-15,color:0xffd68c},
  {id:'lake',name:'Lago da serenidade',x:31,z:30,color:0x7ee4ec},
  {id:'desert',name:'Santuário das dunas',x:-119,z:-24,color:0xffc279},
  {id:'snow',name:'Farol da aurora',x:43,z:124,color:0xb9d9ff},
+ {id:'crimson',name:'Forja do vulcão',x:122,z:-28,color:0xff5533},
 ] as const;
 export const riverCenter = (z: number) => 22+Math.sin(z*.028)*7;
-export const LAKES = [
-  {x: -6, z: 8, rx: 18, rz: 13, level: 0.28},
-  {x: 62, z: -36, rx: 14, rz: 16, level: 0.16},
-  {x: -42, z: -55, rx: 12, rz: 11, level: 0.34}
-] as const;
+export const LAKES = [{ x: 28, z: 34, rx: 22, rz: 20, level: 0.4 }] as const;
 export function riverWidth(z: number): number {
-  const enter = smooth(-108, -92, z);
+  const enter = smooth(-108, -88, z);
   const bulge = Math.max(smooth(-18, 6, z) * (1 - smooth(22, 40, z)), smooth(48, 70, z) * (1 - smooth(78, 96, z)));
-  const leave = 1 - smooth(96, 118, z);
+  const leave = 1 - smooth(58, 78, z);
   return (7.2 + bulge * 16) * enter * Math.max(0, leave);
 }
 function lakeHit(x: number, z: number): { level: number; shore: number } | null {
@@ -37,7 +54,7 @@ function lakeHit(x: number, z: number): { level: number; shore: number } | null 
 export function waterLevel(z: number, x = 0): number {
   const lake = lakeHit(x, z);
   if (lake) return lake.level;
-  return .35 + (1 - smooth(-96, 12, z)) * .75;
+  return 0.4 + (1 - smooth(-96, 12, z)) * 0.65;
 }
 export function waterFootprint(x: number, z: number): boolean {
   if (lakeHit(x, z)) return true;
@@ -50,32 +67,30 @@ export function rawHeight(x: number,z: number): number {
  const rolling=(Math.sin(x*.054)*Math.cos(z*.051)*2.5+Math.sin(x*.113+z*.064)*1.1+Math.cos(z*.117-x*.066)*.8)*flat;
  const dunes=2.7+Math.sin(x*.065+z*.026)*3+Math.sin(z*.08)*1.5;
  const mountains=5+Math.sin(x*.047)*Math.cos(z*.039)*5+Math.pow(Math.sin(z*.046+x*.016),2)*7;
- let h=rolling*w.plains+dunes*w.desert+mountains*w.snow;
- // Keep landmarks approachable, with deterministic safe ground under their pads.
- for(const p of LANDMARKS) if(p.id!=='lake') { const d=Math.hypot(x-p.x,z-p.z); const base=p.id==='snow'?9:p.id==='desert'?3:0; h=base+(h-base)*smooth(9,20,d); }
+ const volcanic=3.2+Math.sin(x*.052-z*.041)*4.2+Math.pow(Math.sin(x*.07+z*.04),2)*6+Math.cos(z*.09-x*.05)*2.2;
+ let h=rolling*w.plains+dunes*w.desert+mountains*w.snow+volcanic*w.crimson;
+ for(const p of LANDMARKS) if(p.id!=='lake') {
+   const d=Math.hypot(x-p.x,z-p.z);
+   const base=p.id==='snow'?9:p.id==='desert'?3:p.id==='crimson'?4.5:0;
+   h=base+(h-base)*smooth(9,20,d);
+ }
  const width=riverWidth(z); const dx=Math.abs(x-riverCenter(z));
  if(width>.12 && dx<width+8) {
    const level=waterLevel(z, x); const shore=dx/width;
    const bed=level-1.85+1.5*smooth(.5,1,shore);
    if(shore<=1) h=bed;
    else {
-     const bank=level+.72+.55*smooth(1,1.35,shore);
-     h=Math.max(h,bank);
+     const blend=smooth(1,1.85,shore);
+     const lip=level+0.18;
+     h=lip+(h-lip)*blend;
    }
  }
  for (const lake of LAKES) {
    const nx=(x-lake.x)/lake.rx, nz=(z-lake.z)/lake.rz;
    const n=nx*nx+nz*nz;
-   if(n>=2.1) continue;
+   if(n>=1) continue;
    const shore=Math.sqrt(n);
-   const water=lake.level;
-   if(n<1) {
-     const bed=water-1.9+1.58*smooth(.4,1,shore);
-     h=bed;
-   } else {
-     const bank=water+.62+.75*smooth(1,1.5,shore);
-     h=Math.max(h,bank);
-   }
+   h=lake.level-1.9+1.58*smooth(.4,1,shore);
  }
  const edge=smooth(151,179,Math.max(Math.abs(x),Math.abs(z)))*15;
  return h+edge;

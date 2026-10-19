@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { Character } from '../characters/Character';
 import { Sound } from '../audio/Sound';
 import { CombatEffects, TrainingDummy, type AttackStyle } from '../combat/Combat';
-import { GRAVITY, JUMP_SPEED, RACES, RUN_SPEED, WALK_SPEED, createStats, getRace, spendKi } from '../data/gameConfig';
+import { GRAVITY, JUMP_SPEED, RACES, RUN_SPEED, WALK_SPEED, createStats, getRace, isRacePlayable, RACE_UNAVAILABLE_MSG, spendKi } from '../data/gameConfig';
 import { PowerController } from './PowerController';
 import { ATTRIBUTE_INFO, RACE_APPEARANCE, makeProfile, loadProfiles, saveProfiles, type Appearance, type PlayerProfile, type AttributeKey } from '../data/profiles';
 import type { FighterStats, GameState, RaceId } from '../data/gameConfig';
@@ -119,6 +119,9 @@ export class Game {
     this.scene.add(this.camera);
     canvasRoot.append(this.renderer.domElement);
     this.world = new World(this.scene);
+    void import('../world/natureDecor').then(m => m.decorateNature(this.world)).catch(() => {});
+    void import('../world/villageDecor').then(m => m.decorateVillage(this.world)).catch(() => {});
+    void import('../world/rockDecor').then(m => m.decorateRocks(this.world)).catch(() => {});
     this.shop = new ShopStall(this.world);
     this.rpgPanels = new RpgPanels(this.rpg,{
       onClose:()=>this.resumeGameplayPointer(),
@@ -224,9 +227,9 @@ export class Game {
       day:value=>{this.dayTime=value;this.world.setDay(value);},
       dayAuto:enabled=>{this.dayAuto=enabled;},
       heroBack: () => this.changeState('MAIN_MENU'),
-      customize: (appearance, name) => this.previewCustomization(appearance, name),
+      customize: appearance => this.previewCustomization(appearance),
       preview: id => { this.sound.play('select'); this.selectRace(id, true); },
-      confirm: () => this.startAdventure(),
+      confirm: () => void this.confirmStartAdventure(),
       back: () => { this.sound.play('click'); this.ui.renderProfiles(this.profiles); this.changeState('CHARACTER_SELECT'); },
       pause: () => this.pause(),
       resume: () => this.resume(),
@@ -315,18 +318,38 @@ export class Game {
       if (!ok) this.ui.toast('NÃO FOI POSSÍVEL CARREGAR O GUERREIRO. VOLTE E TENTE NOVAMENTE.', 'danger', 8);
     });
     this.character.root.position.copy(this.world.spawn);
-    if (applyLook && this.editingProfile && this.state === 'RACE_SELECTION') {
+    if (applyLook && this.editingProfile && this.state === 'RACE_SELECTION' && this.ui.creatorStep === 1) {
       this.editingProfile.race = race;
       this.editingProfile.appearance = { ...RACE_APPEARANCE[race] };
       this.ui.editAppearance(this.editingProfile.appearance, this.editingProfile.name);
+    } else if (applyLook && this.editingProfile) {
+      this.editingProfile.race = race;
     }
     if (this.editingProfile) this.character.setAppearance(this.editingProfile.appearance);
     this.character.root.rotation.y = Math.PI;
     this.scene.add(this.character.root);
   }
 
+  private async confirmStartAdventure(): Promise<void> {
+    const { askOrigensHeroLaunch } = await import('../ui/origensModal');
+    const result = await askOrigensHeroLaunch({
+      title: 'Como se chama seu guerreiro?',
+      message: 'Escolha o nome que aparecerá na jornada. Você pode mudar depois criando outro personagem.',
+      defaultName: '',
+      confirm: 'Jogar',
+      cancel: 'Voltar',
+    });
+    if (!result.ok || !this.editingProfile) return;
+    this.editingProfile.name = result.name;
+    await this.startAdventure();
+  }
+
   private async startAdventure(): Promise<void> {
     this.sound.play('select');
+    if (!isRacePlayable(this.ui.selected)) {
+      this.ui.toast(RACE_UNAVAILABLE_MSG[this.ui.selected] ?? 'Raça indisponível', 'danger', 4);
+      return;
+    }
     this.selectRace(this.ui.selected);
     if (!this.editingProfile) this.editingProfile = makeProfile(this.raceId);
     this.editingProfile.race = this.raceId;
@@ -532,17 +555,23 @@ export class Game {
     this.startAdventure();
   }
 
-  private deleteHero(id: string): void {
-    if (!window.confirm('Excluir este personagem e seus atributos?')) return;
+  private async deleteHero(id: string): Promise<void> {
+    const { askOrigensModal } = await import('../ui/origensModal');
+    const ok = await askOrigensModal({
+      title: 'Excluir guerreiro?',
+      message: 'Este personagem e o progresso dele serão removidos deste navegador.',
+      confirm: 'Excluir',
+      cancel: 'Manter',
+    });
+    if (!ok) return;
     this.profiles = this.profiles.filter(p=>p.id!==id);
     saveProfiles(this.profiles);
     this.ui.renderProfiles(this.profiles);
   }
 
-  private previewCustomization(appearance: Appearance, name: string): void {
+  private previewCustomization(appearance: Appearance): void {
     if (!this.editingProfile || this.state !== 'RACE_SELECTION')return;
     this.editingProfile.appearance = {...appearance};
-    this.editingProfile.name = name.slice(0,28);
     this.character.setAppearance(appearance);
   }
 
@@ -1036,6 +1065,8 @@ export class Game {
       this.character.root.visible = true;
       this.character.root.rotation.y = Math.PI - Math.sin(this.cameraTime * 0.26) * 0.18;
       this.character.animate(dt, 0, false, false);
+      const menuFocus = this.world.spawn.clone().add(new THREE.Vector3(6, 0, 4));
+      this.wildlife.update(dt, menuFocus, () => {});
       const p = this.world.spawn;
       this.camera.position.lerp(new THREE.Vector3(p.x + 17 + Math.sin(this.cameraTime * 0.2) * 2, p.y + 8.1, p.z + 18), Math.min(1, dt * 1.1));
       this.camera.lookAt(p.x - 1.4, p.y + 1.9, p.z - 4);
@@ -1047,12 +1078,13 @@ export class Game {
       this.character.setFirstPerson(false);
       this.character.root.visible = true;
       const step = this.ui.creatorStep;
-      this.character.root.rotation.y = Math.PI+this.ui.previewYaw;
+      this.character.root.rotation.y = Math.PI;
       this.character.animate(dt, 0, false, false);
       const p = this.world.spawn;
+      const zoom = 1.45;
       const view = step === 3
-        ? new THREE.Vector3(p.x, p.y + 1.95, p.z + 1.1/this.ui.previewZoom)
-        : new THREE.Vector3(p.x, p.y + 1.45, p.z + 4.1/this.ui.previewZoom);
+        ? new THREE.Vector3(p.x, p.y + 1.95, p.z + 1.1 / zoom)
+        : new THREE.Vector3(p.x, p.y + 1.45, p.z + 4.1 / zoom);
       this.camera.position.copy(view);
       this.camera.lookAt(p.x, p.y + (step === 3 ? 1.94 : 1.2), p.z);
     }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a202b" />
     <meta name="description" content="Dragon Ball RPG: Origens — um protótipo de aventura 3D estilizada." />
-    <title>Dragon Ball RPG — Origens · v0.4.0</title>
+    <title>Dragon Ball RPG — Origens · v0.5.0</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
@@ -15,7 +15,7 @@
     <div id="ui-root">
       <header class="topline" id="topline">
         <div class="brand-mark"><span class="brand-icon">✦</span><span>DRAGON BALL <b>RPG</b></span></div>
-        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.4.0</span>
+        <span class="build-tag">ORIGENS <i>·</i> PROTÓTIPO 0.5.0</span>
         <button id="sound-toggle" class="sound-toggle" type="button" aria-label="Alternar áudio">♫ <span>SOM ON</span></button>
       </header>
 
@@ -53,31 +53,54 @@
             <div id="race-options" class="race-options" role="radiogroup" aria-label="Escolha sua raça"></div>
           </div>
           <div id="step-body" class="hidden">
-            <label class="creator-line">NOME <input id="hero-name" type="text" maxlength="28" placeholder="Nome do guerreiro" value="Novo guerreiro" /></label>
             <div class="creator-sliders">
-              <label>ALTURA <b id="height-number">100%</b><input id="hero-height" type="range" min="94" max="108" value="100" /></label>
-              <label>PORTE <b id="build-number">100%</b><input id="hero-build" type="range" min="90" max="112" value="100" /></label>
+              <label>ALTURA <b id="height-number">100%</b><input id="hero-height" type="range" min="88" max="118" value="100" /></label>
+              <label>PORTE <b id="build-number">100%</b><input id="hero-build" type="range" min="82" max="128" value="100" /></label>
             </div>
-            <p class="creator-tip">A variação é curta de propósito. A silhueta da raça continua reconhecível.</p>
+            <p class="creator-tip">Altura e porte podem ficar bem exagerados — a raça ainda se reconhece.</p>
           </div>
           <div id="step-face" class="hidden">
-            <div class="creator-options">
-              <label>CABELO <select id="hero-hair"><option value="0">Espetado</option><option value="1">Curto</option><option value="2">Volumoso</option></select></label>
-              <label>BARBA <select id="hero-beard-style"><option value="0">Nenhuma</option><option value="1">Curta</option><option value="2">Cavanhaque</option><option value="3">Cheia</option></select></label>
-              <label class="hidden">BARBA <input id="hero-beard" type="checkbox" /></label>
-              <label>OLHOS <input id="hero-eye" type="color" value="#45b4e9" /></label>
-              <label>CABELO/COR <input id="hero-haircolor" type="color" value="#202436" /></label>
+            <select id="hero-hair" class="visually-hidden" aria-hidden="true" tabindex="-1"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+            <select id="hero-beard-style" class="visually-hidden" aria-hidden="true" tabindex="-1"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+            <select id="hero-outfit" class="visually-hidden" aria-hidden="true" tabindex="-1"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+            <input id="hero-beard" type="checkbox" class="visually-hidden" tabindex="-1" aria-hidden="true" />
+            <div class="creator-block" data-human-only>
+              <p class="creator-section-label">Estilo de cabelo</p>
+              <div id="hair-gallery" class="hair-gallery" aria-label="Estilos de cabelo"></div>
+              <div class="creator-color-panel">
+                <span class="creator-section-label subtle">Cor do cabelo</span>
+                <label class="creator-color-pick"><input id="hero-haircolor" type="color" value="#202436" /><span>Escolher cor</span></label>
+                <div id="hair-swatches" class="swatches" aria-label="Atalhos de cabelo"></div>
+              </div>
             </div>
-            <div id="hair-gallery" class="hair-gallery" aria-label="Estilos de cabelo">
-              <button type="button" data-hair-style="0" class="hair-preset selected"><span class="hair-glyph wild">♛</span><b>ESPETADO</b></button>
-              <button type="button" data-hair-style="1" class="hair-preset"><span class="hair-glyph short">◕</span><b>CURTO</b></button>
-              <button type="button" data-hair-style="2" class="hair-preset"><span class="hair-glyph wild">✦</span><b>VOLUMOSO</b></button>
+            <div class="creator-block" data-human-only>
+              <p class="creator-section-label">Estilo de barba</p>
+              <div id="beard-gallery" class="hair-gallery beard-gallery" aria-label="Estilos de barba"></div>
+              <div id="beard-color-block" class="creator-color-panel hidden">
+                <span class="creator-section-label subtle">Cor da barba</span>
+                <label class="creator-color-pick"><input id="hero-beardcolor" type="color" value="#202436" /><span>Escolher cor</span></label>
+                <div id="beard-swatches" class="swatches" aria-label="Atalhos de barba"></div>
+              </div>
             </div>
-            <p class="creator-tip">Selecione um estilo e veja o cabelo mudar no personagem 3D em tempo real.</p>
-            <div id="eye-swatches" class="swatches"></div>
-            <div id="hair-swatches" class="swatches"></div>
+            <div class="creator-block">
+              <p class="creator-section-label">Roupa</p>
+              <div id="outfit-gallery" class="hair-gallery outfit-gallery" aria-label="Roupas"></div>
+            </div>
+            <div class="creator-block creator-eyes-block">
+              <p class="creator-section-label">Olhos</p>
+              <div class="eye-picker">
+                <div id="eye-preview" class="eye-preview" aria-hidden="true"><span class="eye-preview-iris"></span><span class="eye-preview-pupil"></span></div>
+                <div class="eye-picker-controls">
+                  <label class="creator-color-pick">Íris <input id="hero-eye" type="color" value="#e8f4ff" /></label>
+                  <label class="creator-color-pick">Pupila <input id="hero-pupil" type="color" value="#1a2838" /></label>
+                </div>
+              </div>
+              <div id="eye-swatches" class="swatches" aria-label="Atalhos de íris"></div>
+              <div id="pupil-swatches" class="swatches" aria-label="Atalhos de pupila"></div>
+            </div>
+            <p class="creator-tip">Cada escolha atualiza o personagem 3D ao lado.</p>
           </div>
-          <div class="preview-controls"><label>GIRAR <input id="preview-rotate" type="range" min="-180" max="180" value="0" /></label><label>APROXIMAR <input id="preview-zoom" type="range" min="75" max="145" value="100" /></label></div><div class="creator-nav">
+          <div class="creator-nav">
             <button id="creator-next" class="button button-primary" type="button">CONTINUAR →</button>
             <button id="race-confirm" class="button button-primary race-confirm hidden" type="button">SALVAR E JOGAR <span class="button-arrow">→</span></button>
           </div>
@@ -103,7 +126,7 @@
         <div id="charge-ui" class="charge-ui hidden"><span id="charge-label">CARREGANDO KI</span><div class="charge-track"><i id="charge-fill"></i></div><small id="charge-power">1.0×</small></div>
         <div id="venture-hint" class="venture-hint">I · MOCHILA &nbsp; B · LOJA PERTO DO MERCADOR</div><div class="skill-hotbar" id="skill-hotbar" aria-label="Barra de poderes"></div><div class="flight-indicator hidden" id="flight-indicator">✦ VOO GASTA KI · CORRER GASTA STAMINA</div>
         <div class="ability-panel"><div class="ability-orb" id="ability-orb"><div class="ability-orb-inner" id="ability-symbol">✦</div></div><div class="ability-copy"><span>PODER ATIVO</span><strong id="ability-name">—</strong><small id="ability-status">K BIBLIOTECA · 1–6 SEGURE E SOLTE</small></div><span class="ability-key" id="ability-slot-key">1</span></div>
-        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.4.0</div>
+        <div id="hud-bottom-center" class="hud-bottom-center">DRAGON BALL RPG <span>✦</span> PROTÓTIPO 0.5.0</div>
         <div id="toast" class="toast hidden" role="status"></div>
         <div id="combat-number-layer"></div>
       </section>
@@ -296,7 +319,23 @@
           </footer>
         </div>
       </div>
-      <section id="defeat-screen" class="screen panel-screen hidden"><div class="panel-card"><div class="eyebrow">UM NOVO FÔLEGO</div><h2>O TREINO <em>CONTINUA.</em></h2><p>Você caiu em combate. Sua jornada e aparência foram preservadas.</p><button id="respawn-button" class="button button-primary" type="button">VOLTAR AO ÚLTIMO SANTUÁRIO</button></div></section><div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.4.0</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Crie seu guerreiro, domine os poderes e explore a Planície Esmeralda, as Dunas do Sol e a Serra da Aurora.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
+      <section id="defeat-screen" class="screen panel-screen hidden"><div class="panel-card"><div class="eyebrow">UM NOVO FÔLEGO</div><h2>O TREINO <em>CONTINUA.</em></h2><p>Você caiu em combate. Sua jornada e aparência foram preservadas.</p><button id="respawn-button" class="button button-primary" type="button">VOLTAR AO ÚLTIMO SANTUÁRIO</button></div></section>
+      <div id="origens-modal" class="origens-modal hidden" role="dialog" aria-modal="true" aria-labelledby="origens-modal-title">
+        <div class="origens-modal-card">
+          <div class="eyebrow">CONFIRMAÇÃO</div>
+          <h2 id="origens-modal-title">Confirmar?</h2>
+          <p id="origens-modal-body"></p>
+          <div id="origens-modal-name-wrap" class="origens-modal-name-wrap hidden">
+            <label for="origens-modal-name">Nome do guerreiro</label>
+            <input id="origens-modal-name" class="origens-modal-name" type="text" maxlength="28" placeholder="Ex.: Son Goku" autocomplete="off" />
+          </div>
+          <div class="origens-modal-actions">
+            <button type="button" id="origens-modal-cancel" class="button button-subtle">Cancelar</button>
+            <button type="button" id="origens-modal-confirm" class="button button-primary">Confirmar</button>
+          </div>
+        </div>
+      </div>
+      <div id="about-dialog" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="about-title"><div class="about-card"><button id="about-close" class="close-modal" type="button" aria-label="Fechar">×</button><div class="eyebrow">PROTÓTIPO 0.5.0</div><h2 id="about-title">A PRIMEIRA <em>JORNADA.</em></h2><p>Uma pequena aventura 3D criada para explorar o futuro de Dragon Ball RPG: Origens. Crie seu guerreiro, domine os poderes e explore a Planície Esmeralda, as Dunas do Sol e a Serra da Aurora.</p><p>Projeto experimental de fã, sem vínculo com os titulares da franquia. O código foi organizado para facilitar uma futura reimplementação na Unreal Engine.</p><button class="button button-primary" id="about-ok" type="button">ENTENDI →</button></div></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -52,6 +52,13 @@ test('POC inclui arquivos locais do guerreiro, fauna, loja e referências',()=>{
   'src/world/ShopStall.ts','src/ui/RpgPanels.ts',
   'src/systems/RpgLoop.ts',
   'docs/POC_V040.md',
+  'public/assets/environment/nature/BirchTree_1.gltf',
+  'public/assets/environment/nature/BirchTree_1.bin',
+  'public/assets/environment/nature/BirchTree_Bark.jpg',
+  'public/assets/environment/nature/Bush.gltf',
+  'public/assets/environment/nature/Grass_Large.gltf',
+  'public/assets/environment/village/Prop_Crate.gltf',
+  'public/assets/environment/village/Prop_Crate.bin',
  ]) assert.ok(existsSync(file(p)),p);
 });
 

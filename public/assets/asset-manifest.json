@@ -1,0 +1,163 @@
+{
+  "version": "0.5.0",
+  "assets": [
+    {
+      "id": "animal.wolf",
+      "path": "public\\assets\\creatures\\animals\\wolf\\Wolf.gltf",
+      "package": "Ultimate Animated Animals",
+      "role": "wolf"
+    },
+    {
+      "id": "animal.deer",
+      "path": "public\\assets\\creatures\\animals\\deer\\Deer.gltf",
+      "package": "Ultimate Animated Animals",
+      "role": "deer"
+    },
+    {
+      "id": "animal.hare",
+      "path": "public\\assets\\creatures\\animals\\hare\\Fox.gltf",
+      "package": "Ultimate Animated Animals",
+      "role": "hare"
+    },
+    {
+      "id": "animal.cow",
+      "path": "public\\assets\\creatures\\animals\\cow\\Cow.gltf",
+      "package": "Ultimate Animated Animals",
+      "role": "cow"
+    },
+    {
+      "id": "animal.bull",
+      "path": "public\\assets\\creatures\\animals\\bull\\Bull.gltf",
+      "package": "Ultimate Animated Animals",
+      "role": "bull"
+    },
+    {
+      "id": "animal.horse",
+      "path": "public\\assets\\creatures\\animals\\horse\\Horse.gltf",
+      "package": "Ultimate Animated Animals",
+      "role": "horse"
+    },
+    {
+      "id": "anim.ual2",
+      "path": "public\\assets\\animations\\humanoids\\UAL2_Standard.glb",
+      "package": "UAL2",
+      "role": "humanoid clips"
+    },
+    {
+      "id": "body.superhero_male",
+      "path": "public\\assets\\characters\\bodies\\superhero_male\\Superhero_Male_FullBody.gltf",
+      "package": "Universal Base Characters",
+      "role": "superhero_male"
+    },
+    {
+      "id": "body.superhero_female",
+      "path": "public\\assets\\characters\\bodies\\superhero_female\\Superhero_Female_FullBody.gltf",
+      "package": "Universal Base Characters",
+      "role": "superhero_female"
+    },
+    {
+      "id": "hair.Hair_Long.gltf",
+      "path": "public\\assets\\characters\\hair\\Hair_Long.gltf",
+      "package": "Universal Base Characters",
+      "role": "hair"
+    },
+    {
+      "id": "hair.Hair_Buns.gltf",
+      "path": "public\\assets\\characters\\hair\\Hair_Buns.gltf",
+      "package": "Universal Base Characters",
+      "role": "hair"
+    },
+    {
+      "id": "hair.Hair_Buzzed.gltf",
+      "path": "public\\assets\\characters\\hair\\Hair_Buzzed.gltf",
+      "package": "Universal Base Characters",
+      "role": "hair"
+    },
+    {
+      "id": "hair.Hair_BuzzedFemale.gltf",
+      "path": "public\\assets\\characters\\hair\\Hair_BuzzedFemale.gltf",
+      "package": "Universal Base Characters",
+      "role": "hair"
+    },
+    {
+      "id": "hair.Hair_SimpleParted.gltf",
+      "path": "public\\assets\\characters\\hair\\Hair_SimpleParted.gltf",
+      "package": "Universal Base Characters",
+      "role": "hair"
+    },
+    {
+      "id": "hair.Hair_Beard.gltf",
+      "path": "public\\assets\\characters\\hair\\Hair_Beard.gltf",
+      "package": "Universal Base Characters",
+      "role": "hair"
+    },
+    {
+      "id": "outfit.Male_Ranger.gltf",
+      "path": "public\\assets\\characters\\outfits\\Male_Ranger.gltf",
+      "package": "Modular Outfits Fantasy",
+      "role": "outfit"
+    },
+    {
+      "id": "outfit.Male_Peasant.gltf",
+      "path": "public\\assets\\characters\\outfits\\Male_Peasant.gltf",
+      "package": "Modular Outfits Fantasy",
+      "role": "outfit"
+    },
+    {
+      "id": "outfit.Female_Ranger.gltf",
+      "path": "public\\assets\\characters\\outfits\\Female_Ranger.gltf",
+      "package": "Modular Outfits Fantasy",
+      "role": "outfit"
+    },
+    {
+      "id": "outfit.Female_Peasant.gltf",
+      "path": "public\\assets\\characters\\outfits\\Female_Peasant.gltf",
+      "package": "Modular Outfits Fantasy",
+      "role": "outfit"
+    },
+    {
+      "id": "monster.ghost",
+      "path": "public\\assets\\creatures\\monsters\\ghost\\Ghost.gltf",
+      "package": "Ultimate Monsters",
+      "role": "ghost"
+    },
+    {
+      "id": "monster.orc",
+      "path": "public\\assets\\creatures\\monsters\\orc\\Orc.gltf",
+      "package": "Ultimate Monsters",
+      "role": "orc"
+    },
+    {
+      "id": "monster.blob",
+      "path": "public\\assets\\creatures\\monsters\\blob\\GreenBlob.gltf",
+      "package": "Ultimate Monsters",
+      "role": "blob"
+    },
+    {
+      "id": "nature.gltf_folder",
+      "path": "public\\assets\\environment\\nature",
+      "package": "Ultimate Stylized Nature",
+      "role": "environment",
+      "files": 93
+    },
+    {
+      "id": "village.gltf_folder",
+      "path": "public\\assets\\environment\\village",
+      "package": "Medieval Village MegaKit",
+      "role": "village",
+      "files": 374
+    },
+    {
+      "id": "vfx.kenney_pack",
+      "path": "public\\assets\\vfx\\textures\\kenney",
+      "package": "kenney_particle-pack",
+      "role": "particles"
+    },
+    {
+      "id": "vfx.brackeys",
+      "path": "public\\assets\\vfx\\textures\\brackeys",
+      "package": "brackeys_vfx_bundle",
+      "role": "particles"
+    }
+  ]
+}

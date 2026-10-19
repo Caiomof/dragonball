@@ -18,6 +18,15 @@ export type Race = {
 };
 
 export const RACES: Race[] = raceData as Race[];
+
+export const RACE_UNAVAILABLE_MSG: Partial<Record<RaceId, string>> = {
+  namekuseijin: 'Em desenvolvimento — modelo 3D indisponível',
+  majin: 'Em desenvolvimento — modelo 3D indisponível',
+};
+
+export function isRacePlayable(id: RaceId): boolean {
+  return !RACE_UNAVAILABLE_MSG[id];
+}
 export const ABILITIES = abilityData;
 export const WALK_SPEED = 2.25;
 export const RUN_SPEED = 9;

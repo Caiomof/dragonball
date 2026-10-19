@@ -1,4 +1,7 @@
 import { buildAccessories, disposeAccessories } from './Appearance';
+import { attachOutfit } from './outfitLoader';
+import { OUTFIT_OPTIONS } from '../data/appearanceCatalog';
+import { prepareGltfScene } from '../rendering/gltfMaterials';
 import { createHeroClips } from '../animation/HeroClips';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -135,7 +138,7 @@ export class Character {
   private legsAction: THREE.AnimationAction | null = null;
   private armsAction: THREE.AnimationAction | null = null;
   private readonly auraLight = new THREE.PointLight(0x6bcaff, 0, 6);
-  private static modelPromise: Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] } | null> | null = null;
+  private static heroCache = new Map<string, Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] } | null>>();
   private firstPerson = false;
   private texturedHero = false;
   private readonly handGlows: THREE.Sprite[] = [];
@@ -299,23 +302,28 @@ export class Character {
   }
 
   private async tryLoadModel(): Promise<boolean> {
-    if (!Character.modelPromise) {
+    const cacheKey = 'superhero_male';
+    if (!Character.heroCache.has(cacheKey)) {
       const loader = new GLTFLoader();
-      Character.modelPromise = Promise.all([
-        loader.loadAsync('/models/hero/Superhero_Male_FullBody.gltf'),
-        loader.loadAsync('/models/anims/ual1.glb')
-      ]).then(([hero, motion]) => ({
-        scene: hero.scene,
-        animations: [...(motion?.animations ?? []), ...hero.animations, ...createHeroClips(hero.scene, motion?.animations ?? hero.animations)]
-      })).catch(() => null);
+      const heroUri = '/models/hero/Superhero_Male_FullBody.gltf';
+      Character.heroCache.set(
+        cacheKey,
+        Promise.all([loader.loadAsync(heroUri), loader.loadAsync('/models/anims/ual1.glb')])
+          .then(([hero, motion]) => ({
+            scene: hero.scene,
+            animations: [...(motion?.animations ?? []), ...hero.animations, ...createHeroClips(hero.scene, motion?.animations ?? hero.animations)],
+          }))
+          .catch(() => null)
+      );
     }
-    const source = await Character.modelPromise;
+    const source = await Character.heroCache.get(cacheKey)!;
     if (!source || this.destroyed || source.animations.length === 0) {
       this.figure.visible = true;
       for (const callback of this.visualStatusListeners) callback(false);
       return false;
     }
     const model = cloneSkeleton(source.scene) as THREE.Group;
+    prepareGltfScene(model);
     const palette = palettes[this.race.id];
     const eyeCol = new THREE.Color(this.appearance.eyeColor);
     const hairCol = new THREE.Color(this.appearance.hairColor);
@@ -392,7 +400,8 @@ export class Character {
       this.handGlows.push(sprite);
     }
     this.headBone = model.getObjectByName('Head') ?? null;
-    this.texturedHero = Boolean(model.getObjectByName('SuperHero_Male'));
+    this.texturedHero = Boolean(this.headBone);
+    this.figure.visible = false;
     if (this.headBone && !this.texturedHero) {
       this.headBone.add(this.embellishments);
       this.applyFaceDetails(1 / scale);
@@ -490,23 +499,29 @@ export class Character {
       this.external.position.y = this.externalBaseY * h;
       this.external.traverse(object=>{
         if(!(object instanceof THREE.Mesh))return;
+        let ancestor: THREE.Object3D | null = object;
+        while (ancestor) {
+          if (ancestor.name === 'AppearanceAccessories' || ancestor.name.startsWith('Outfit_')) return;
+          ancestor = ancestor.parent;
+        }
         const materials=Array.isArray(object.material)?object.material:[object.material];
         const skinTint = new THREE.Color(palettes[this.race.id].skin);
         for(const m of materials){
           if(!('color' in m) || !(m.color instanceof THREE.Color))continue;
           const label = m.name.toUpperCase();
           if (this.texturedHero) {
-            const hairPiece = object.name === 'Face' || object.name === 'Eyebrows' || label.includes('HAIR');
-            const eyePiece = object.name === 'Eyes' || (label.includes('EYE') && !label.includes('EYEBROW'));
-            if (hairPiece) {
-              m.color.set(a.hairColor);
-              if (object.name === 'Face') {
-                const sy = a.hair === 0 ? 1.14 : a.hair === 1 ? 0.86 : 1.06;
-                object.scale.set(1, sy, a.hair === 2 ? 1.08 : 1);
+            if (object.name === 'Eyebrows' || label.includes('HAIR')) m.color.set(a.hairColor);
+            else if (object.name === 'Eyes' || object.name === 'MI_Eyes' || label.includes('EYE')) {
+              if (m instanceof THREE.MeshStandardMaterial) {
+                m.color.set(a.eyeColor);
+                m.emissive.set(a.pupilColor ?? '#1a2838');
+                m.emissiveIntensity = 0.24;
+                m.metalness = 0;
+                m.roughness = 0.42;
+                m.needsUpdate = true;
               }
-            }
-            else if (eyePiece) m.color.set(a.eyeColor);
-            else m.color.set('#ffffff');
+            } else if (object.name === 'Face') object.visible = false;
+            else if (label.includes('SUPERHERO')) m.color.set('#ffffff');
             if (object.name === 'Eyebrows') object.visible = true;
             continue;
           }
@@ -514,20 +529,56 @@ export class Character {
           if(label==='EYE_IRIS' || label.includes('EYE'))m.color.set(a.eyeColor);
           if(label.includes('SUPERHERO') || label==='SKIN')m.color.copy(skinTint);
         }
-        if(object.name.startsWith('HAIR_SPIKE')) object.visible = this.race.id!=='namekuseijin' && this.race.id!=='majin' && a.hair!==1;
-        if(object.name==='HAIR_SCALP' || object.name==='HAIR_BANG')object.visible=this.race.id!=='namekuseijin'&&this.race.id!=='majin';
+        const humanHair = this.race.id === 'saiyajin' || this.race.id === 'terraqueo';
+        if (humanHair && (object.name.startsWith('HAIR_') || object.name === 'Eyebrows')) object.visible = false;
+        else if (object.name.startsWith('HAIR_SPIKE')) object.visible = this.race.id !== 'namekuseijin' && this.race.id !== 'majin' && a.hair !== 1;
+        else if (object.name === 'HAIR_SCALP' || object.name === 'HAIR_BANG') object.visible = this.race.id !== 'namekuseijin' && this.race.id !== 'majin';
       });
     }
     this.figure.scale.set(w * h, h, w * h);
     this.face.scale.setScalar(THREE.MathUtils.clamp(a.hair === 2 ? 1.035 : 1,1,1.05));
     if (this.headBone && this.texturedHero) this.syncHeroHair();
     else if (this.headBone) this.applyFaceDetails(1 / ((this.external?.userData.baseScale as number) ?? 1));
+    this.syncOutfit();
   }
 
+  private syncOutfit(): void {
+    if (!this.external) return;
+    const gen = ++this.outfitSyncGen;
+    const choice = this.appearance.outfit ?? 0;
+    const pants = this.external.getObjectByName('Pants');
+    if (pants) pants.visible = choice === 0;
+    if (this.outfitRoot) {
+      this.outfitRoot.removeFromParent();
+      this.outfitRoot = null;
+    }
+    const option = OUTFIT_OPTIONS.find(o => o.id === choice) ?? OUTFIT_OPTIONS[0];
+    if (!option.outfit) return;
+    void attachOutfit(this.external, option.outfit).then(group => {
+      if (gen !== this.outfitSyncGen || this.destroyed) {
+        group.removeFromParent();
+        return;
+      }
+      this.outfitRoot = group;
+    });
+  }
+
+  private hairSyncGen = 0;
+  private outfitSyncGen = 0;
+  private outfitRoot: THREE.Group | null = null;
+
   private syncHeroHair(): void {
-    if(!this.headBone||!this.external)return;
-    disposeAccessories(this.heroHair);
-    this.heroHair=buildAccessories(this.external,this.headBone,this.appearance,this.race.id);
+    if (!this.headBone || !this.external) return;
+    const gen = ++this.hairSyncGen;
+    void buildAccessories(this.external, this.headBone, this.appearance, this.race.id).then(group => {
+      if (gen !== this.hairSyncGen || this.destroyed) {
+        disposeAccessories(group);
+        return;
+      }
+      if (this.heroHair && this.heroHair !== group) disposeAccessories(this.heroHair);
+      this.heroHair = group;
+      this.heroHair.visible = !this.firstPerson;
+    });
   }
 
   private applyFaceDetails(inverseModelScale: number): void {
@@ -921,8 +972,9 @@ export class Character {
       if (flying) this.applyFlightLife(this.flightBoost, speed, dt);
       else this.flightLeg = 0;
       const missile = this.flightBoost;
-      const flightLean = !flying ? 0 : flightPhase==='takeoff' ? -0.18 : flightPhase==='brake' ? -0.1 : moving ? THREE.MathUtils.lerp(-0.20, -1.05, missile) + THREE.MathUtils.clamp(climb * 0.005, -0.03, 0.03) : -0.08;
-      const targetLean = swimming ? -.08 : flightLean;
+      const flightLean = !flying ? 0 : flightPhase==='takeoff' ? -0.24 : flightPhase==='brake' ? -0.1 : moving ? -0.28 - missile * 0.14 + THREE.MathUtils.clamp(climb * 0.006, -0.06, 0.06) : -0.12;
+      const sprintLean = !flying && sprint && moving && !swimming ? -0.2 : 0;
+      const targetLean = swimming ? -.08 : flying ? flightLean : sprintLean;
       this.external.rotation.x = THREE.MathUtils.damp(this.external.rotation.x, targetLean, missile > 0.25 ? 7 : 2.4, dt);
       this.external.rotation.z = THREE.MathUtils.damp(this.external.rotation.z, flying?THREE.MathUtils.clamp(turn,-.12,.12):0,3.5,dt);
       const h = THREE.MathUtils.clamp(this.appearance.height, 0.78, 1.28);

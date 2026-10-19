@@ -23,6 +23,7 @@ function softMote(): THREE.Texture {
 const mote = softMote();
 
 const BIOME_DUST: Record<Biome, number> = {
+  crimson: 0x8a4030,
   plains: 0x9ec86a,
   desert: 0xe4b56a,
   snow: 0xf0f6ff,

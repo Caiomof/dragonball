@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ABILITIES, applyDamage } from '../data/gameConfig';
 import type { World } from '../world/World';
+import { loadBeamTextures, loadImpactTextures, loadVfxGlowTexture, loadVfxSparkTexture } from '../rendering/vfxTextures';
 
 export class TrainingDummy {
   readonly group = new THREE.Group();
@@ -134,13 +135,30 @@ export class CombatEffects {
   private readonly scene: THREE.Scene;
   private readonly effects: ActiveEffect[] = [];
   private readonly sparks: { mesh: THREE.Sprite; velocity: THREE.Vector3; life: number; max: number }[] = [];
-  private readonly glow = softGlowTexture();
+  private glow = softGlowTexture();
+  private spark = softGlowTexture();
+  private beamMaps: THREE.Texture[] = [];
+  private impactMaps: THREE.Texture[] = [];
 
-  constructor(scene: THREE.Scene) { this.scene = scene; }
+  constructor(scene: THREE.Scene) {
+    this.scene = scene;
+    void loadVfxGlowTexture().then(texture => {
+      this.glow = texture;
+    });
+    void loadVfxSparkTexture().then(texture => {
+      this.spark = texture;
+    });
+    void loadBeamTextures().then(textures => {
+      this.beamMaps = textures;
+    });
+    void loadImpactTextures().then(textures => {
+      this.impactMaps = textures;
+    });
+  }
 
-  private mote(color: number, size: number, opacity: number): THREE.Sprite {
+  private mote(color: number, size: number, opacity: number, spark = false): THREE.Sprite {
     const material = new THREE.SpriteMaterial({
-      map: this.glow,
+      map: spark ? this.spark : this.glow,
       color,
       transparent: true,
       opacity,
@@ -219,6 +237,11 @@ export class CombatEffects {
         });
       }
       e.particles.forEach((p, n) => {
+        if (this.beamMaps.length) {
+          const mat = p.material as THREE.SpriteMaterial;
+          const map = this.beamMaps[n % this.beamMaps.length];
+          if (mat.map !== map) mat.map = map;
+        }
         const a = n * 2.39996;
         const t = active ? ((n / e.particles.length + progress * 3) % 1) : 0;
         const spread = active ? 0.34 : 0.72;
@@ -274,7 +297,11 @@ export class CombatEffects {
     this.sparks.push({ mesh: flash, velocity: new THREE.Vector3(), life: 0.28, max: 0.28 });
     const sparks = Math.min(48, 14 + Math.round(blastRadius * 5));
     for (let i = 0; i < sparks; i++) {
-      const mesh = this.mote(i % 3 === 0 ? 0xfff4d2 : color, 0.28 + Math.random() * 0.45, 0.9);
+      const mesh = this.mote(i % 3 === 0 ? 0xfff4d2 : color, 0.28 + Math.random() * 0.45, 0.9, true);
+      if (this.impactMaps.length) {
+        const mat = mesh.material as THREE.SpriteMaterial;
+        mat.map = this.impactMaps[i % this.impactMaps.length];
+      }
       mesh.position.copy(point);
       this.scene.add(mesh);
       const life = 0.45 + Math.random() * 0.4;

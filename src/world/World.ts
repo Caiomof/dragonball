@@ -41,6 +41,7 @@ export class World {
   private readonly breakables: Breakable[] = [];
   private nextBreakableId = 1;
   readonly respawnSeconds = 120;
+  readonly treeStands: THREE.Group[] = [];
 
   constructor(scene: THREE.Scene) {
     this.boundScene = scene;
@@ -236,10 +237,10 @@ export class World {
           float ripples=sin(flow+sin(vUV.x*27.0+uTime*.5)*1.6)*.5+.5;
           float small=sin(vUV.x*92.0+vUV.y*141.0-uTime*3.8)*.5+.5;
           float shore=pow(abs(vUV.x-.5)*2.0, 3.0);
-          vec3 deep=vec3(.035,.32,.40);
-          vec3 shallow=vec3(.14,.59,.68);
-          vec3 color=mix(deep,shallow,.48+.25*ripples+.09*small);
-          color=mix(color,vec3(.64,.86,.85),shore*.25 + pow(ripples,12.0)*.13);
+          vec3 deep=vec3(.06,.48,.58);
+          vec3 shallow=vec3(.32,.82,.86);
+          vec3 color=mix(deep,shallow,.55+.22*ripples+.1*small);
+          color=mix(color,vec3(.9,.98,.97),shore*.62 + pow(ripples,7.0)*.28);
           gl_FragColor=vec4(color,1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -278,7 +279,7 @@ export class World {
     water.renderOrder = 1;
     this.group.add(water);
     // Foamy banks follow the same spline and are intentionally subtle.
-    const foamMaterial = new THREE.MeshBasicMaterial({color:0xb4d8d4,transparent:true,opacity:.35,depthWrite:false});
+    const foamMaterial = new THREE.MeshBasicMaterial({color:0xe7f7f6,transparent:true,opacity:.62,depthWrite:false});
     for(const side of [-1,1]) {
       const points: THREE.Vector3[]=[];
       for(let i=2;i<lengthSegments-1;i++) {
@@ -286,7 +287,7 @@ export class World {
         const width=this.riverWidth(z);
         points.push(new THREE.Vector3(this.riverCenter(z)+side*width*.94,this.riverSurface(z)+.055,z));
       }
-      const foam=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),lengthSegments,.035,3,false),foamMaterial);
+      const foam=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),lengthSegments,.09,5,false),foamMaterial);
       foam.name='River — soft bank foam';
       this.group.add(foam);
     }
@@ -311,7 +312,8 @@ export class World {
       for(let i=0;i<position.count;i++){
         const x=position.getX(i),z=position.getZ(i),h=this.rawHeight(x,z),weights=biomeWeights(x,z);position.setY(i,h);
         const patch=Math.sin(x*.17+z*.13)*Math.sin(z*.21-x*.09);
-        color.copy(grass).lerp(light,(patch*.5+.5)*.72+.1).lerp(sand,weights.desert).lerp(sandDark,weights.desert*Math.max(0,patch)*.55).lerp(snow,weights.snow).lerp(snowBlue,weights.snow*Math.max(0,-patch)*.4);
+        const ash=new THREE.Color('#3a1818'),ember=new THREE.Color('#8a2820'),lava=new THREE.Color('#c43828');
+        color.copy(grass).lerp(light,(patch*.5+.5)*.72+.1).lerp(sand,weights.desert).lerp(sandDark,weights.desert*Math.max(0,patch)*.55).lerp(snow,weights.snow).lerp(snowBlue,weights.snow*Math.max(0,-patch)*.4).lerp(ash,weights.crimson).lerp(ember,weights.crimson*Math.max(0,patch)*.65).lerp(lava,weights.crimson*Math.max(0,-patch)*.35);
         if(waterFootprint(x,z))color.set('#6f958c');color.toArray(colors,i*3);
       }
       geo.setAttribute('color',new THREE.BufferAttribute(colors,3));geo.computeVertexNormals();geo.computeBoundingSphere();
@@ -346,44 +348,29 @@ export class World {
       placements.push({ x, z, s, variant: i % 4 });
       this.obstacles.push({ x, z, radius: 1.15 * s, active: true, height: 5.8 * s });
     }
-    const trunkGeo = new THREE.CylinderGeometry(0.38, 0.62, 4.5, 7);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x766247, roughness: 1, flatShading: true });
-    const trunkInstances = new THREE.InstancedMesh(trunkGeo, trunkMat, placements.length);
-    const leafGeo = new THREE.IcosahedronGeometry(2.6, 1);
-    const canopyMaterials = [0x4e8b57, 0x6b9c58, 0x3f8465].map((color) => new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true }));
-    const canopies = canopyMaterials.map((mat) => new THREE.InstancedMesh(leafGeo, mat, placements.length * 2));
-    const dummy = new THREE.Object3D();
-    const counts = [0, 0, 0];
     for (let i = 0; i < placements.length; i++) {
       const p = placements[i];
       const ground = this.height(p.x, p.z);
-      dummy.position.set(p.x, ground + 2.25 * p.s, p.z);
-      dummy.rotation.set(0, rnd() * 5, 0);
-      dummy.scale.setScalar(p.s);
-      dummy.updateMatrix();
-      trunkInstances.setMatrixAt(i, dummy.matrix);
-      const parts: Part[] = [{ mesh: trunkInstances, index: i, transform: dummy.matrix.clone() }];
-      const c = p.variant % 3;
-      for (let j = 0; j < 2; j++) {
-        dummy.position.set(p.x + (j ? 1.1 : -0.7) * p.s, ground + (5.6 + j * 1.25) * p.s, p.z + (j ? 0.3 : -0.7) * p.s);
-        dummy.scale.setScalar(p.s * (j ? 0.76 : 1));
-        dummy.rotation.set(0.1, rnd() * 5, 0);
-        dummy.updateMatrix();
-        const slot = counts[c]++;
-        canopies[c].setMatrixAt(slot, dummy.matrix);
-        parts.push({ mesh: canopies[c], index: slot, transform: dummy.matrix.clone() });
-      }
-      this.breakables.push({ id: this.nextBreakableId++, label: 'ÁRVORE', center: new THREE.Vector3(p.x, ground + 2.8 * p.s, p.z), radius: 2.05 * p.s, health: 65, maxHealth: 65, respawn: 0, parts, obstacle: this.obstacles[this.obstacles.length - placements.length + i] });
+      const stand = new THREE.Group();
+      stand.name = 'TreeStand';
+      stand.position.set(p.x, ground, p.z);
+      stand.rotation.y = rnd() * Math.PI * 2;
+      stand.userData.treeScale = p.s;
+      this.group.add(stand);
+      this.treeStands.push(stand);
+      this.breakables.push({
+        id: this.nextBreakableId++,
+        label: 'ÁRVORE',
+        center: new THREE.Vector3(p.x, ground + 2.8 * p.s, p.z),
+        radius: 2.05 * p.s,
+        health: 65,
+        maxHealth: 65,
+        respawn: 0,
+        parts: [],
+        standalone: stand,
+        obstacle: this.obstacles[this.obstacles.length - placements.length + i],
+      });
     }
-    trunkInstances.castShadow = true;
-    trunkInstances.receiveShadow = true;
-    this.group.add(trunkInstances);
-    canopies.forEach((mesh, i) => {
-      mesh.count = counts[i];
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.group.add(mesh);
-    });
   }
 
   private addRocks(): void {
@@ -652,7 +639,13 @@ export class World {
     const mids=new THREE.InstancedMesh(midGeo,needle,48);
     const tops=new THREE.InstancedMesh(topGeo,needle,48);
     const caps=new THREE.InstancedMesh(capGeo,frost,48);
-    let pi=0,ci=0;const obj=new THREE.Object3D();const cactusParts:Part[]=[];
+    const volcanoGeo=new THREE.ConeGeometry(2.4,5.8,9);
+    const volcanoMat=new THREE.MeshStandardMaterial({color:0x2a1a18,roughness:.96,flatShading:true});
+    const volcanoes=new THREE.InstancedMesh(volcanoGeo,volcanoMat,58);
+    const lavaGeo=new THREE.CylinderGeometry(1.8,2.2,.22,12);
+    const lavaMat=new THREE.MeshStandardMaterial({color:0xff5522,emissive:0xff3300,emissiveIntensity:.85,roughness:.4});
+    const lavaPools=new THREE.InstancedMesh(lavaGeo,lavaMat,42);
+    let pi=0,ci=0,vi=0,li=0;const obj=new THREE.Object3D();const cactusParts:Part[]=[];
     for(let i=0;i<420;i++){
       const x=(random()-.5)*310,z=(random()-.5)*310;
       if(LANDMARKS.some(p=>Math.hypot(x-p.x,z-p.z)<17)||waterFootprint(x,z))continue;
@@ -677,14 +670,25 @@ export class World {
         this.breakables.push({id:this.nextBreakableId++,label:'CACTO',center:new THREE.Vector3(x,y+2.1*scale,z),radius:1.65*scale,health:55,maxHealth:55,respawn:0,parts:[cactusParts[cactusParts.length-1]],obstacle});
         ci++;
       }
+      if(biome==='crimson'&&vi<58){
+        obj.scale.setScalar(scale*(1.1+random()*.9));
+        obj.position.set(x,y+2.9*scale,z);obj.updateMatrix();volcanoes.setMatrixAt(vi,obj.matrix);
+        this.obstacles.push({x,z,radius:2.4*scale,height:6*scale,active:true});
+        vi++;
+      }
+      if(biome==='crimson'&&li<42&&random()<.22){
+        obj.scale.set(1.2+random()*2.4,1,1.2+random()*2.4);
+        obj.position.set(x,y+.12,z);obj.updateMatrix();lavaPools.setMatrixAt(li,obj.matrix);
+        li++;
+      }
     }
-    trunks.count=lows.count=mids.count=tops.count=caps.count=pi;cacti.count=ci;
-    for(const mesh of [trunks,lows,mids,tops,caps,cacti]){mesh.castShadow=true;mesh.receiveShadow=true;this.group.add(mesh);}
+    trunks.count=lows.count=mids.count=tops.count=caps.count=pi;cacti.count=ci;volcanoes.count=vi;lavaPools.count=li;
+    for(const mesh of [trunks,lows,mids,tops,caps,cacti,volcanoes,lavaPools]){mesh.castShadow=true;mesh.receiveShadow=true;this.group.add(mesh);}
     this.addGroundDress();
     for(const p of LANDMARKS){
       if(p.id==='lake'||p.id==='training')continue;
       const y=this.height(p.x,p.z);
-      const stone=new THREE.MeshStandardMaterial({color:p.id==='snow'?0x7796aa:0xb58b64,roughness:.8});
+      const stone=new THREE.MeshStandardMaterial({color:p.id==='snow'?0x7796aa:p.id==='crimson'?0x6a3a38:0xb58b64,roughness:.8});
       const ring=new THREE.Mesh(new THREE.TorusGeometry(4.3,.16,8,48),stone);ring.rotation.x=-Math.PI/2;ring.position.set(p.x,y+.15,p.z);this.group.add(ring);
       for(let i=0;i<5;i++) {const angle=i*Math.PI*2/5;const pillar=new THREE.Mesh(new THREE.CylinderGeometry(.55,.8,4+i%2,6),stone);pillar.position.set(p.x+Math.cos(angle)*7,y+2,p.z+Math.sin(angle)*7);pillar.castShadow=true;this.group.add(pillar);this.obstacles.push({x:pillar.position.x,z:pillar.position.z,radius:.8,height:5});}
       const beam=new THREE.Mesh(new THREE.CylinderGeometry(.12,.5,20,12,1,true),new THREE.MeshBasicMaterial({color:p.color,transparent:true,opacity:.25,depthWrite:false,side:THREE.DoubleSide}));beam.position.set(p.x,y+10,p.z);this.group.add(beam);
@@ -697,8 +701,9 @@ export class World {
     const pebble = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.22, 0), new THREE.MeshStandardMaterial({ color: 0xc49255, roughness: 1, flatShading: true }), 1400);
     const shrub = new THREE.InstancedMesh(new THREE.ConeGeometry(0.35, 0.7, 5), new THREE.MeshStandardMaterial({ color: 0x8a7a42, roughness: 1 }), 700);
     const snowClump = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 7, 5), new THREE.MeshStandardMaterial({ color: 0xf7fbff, roughness: 0.65 }), 900);
+    const emberClump = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.28, 0), new THREE.MeshStandardMaterial({ color: 0x4a2820, emissive: 0xff4400, emissiveIntensity: 0.35, roughness: 0.9, flatShading: true }), 1100);
     const obj = new THREE.Object3D();
-    let pi = 0, si = 0, ni = 0;
+    let pi = 0, si = 0, ni = 0, ei = 0;
     const pickXZ = (i: number): [number, number] => {
       if (i < 2200) return [(rnd() - 0.5) * 300, (rnd() - 0.5) * 300];
       const edge = Math.floor((i - 2200) / 4) % 4;
@@ -731,12 +736,18 @@ export class World {
         obj.scale.set(0.6 + rnd() * 1.4, 0.35 + rnd() * 0.5, 0.6 + rnd() * 1.2);
         obj.updateMatrix();
         snowClump.setMatrixAt(ni++, obj.matrix);
+      } else if (biome === 'crimson' && ei < 1100) {
+        obj.position.set(x, y + 0.1, z);
+        obj.scale.setScalar(0.5 + rnd() * 1.6);
+        obj.updateMatrix();
+        emberClump.setMatrixAt(ei++, obj.matrix);
       }
     }
     pebble.count = pi;
     shrub.count = si;
     snowClump.count = ni;
-    for (const mesh of [pebble, shrub, snowClump]) {
+    emberClump.count = ei;
+    for (const mesh of [pebble, shrub, snowClump, emberClump]) {
       mesh.receiveShadow = true;
       this.group.add(mesh);
       this.detailObjects.push(mesh);

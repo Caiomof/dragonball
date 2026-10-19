@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import { attachOutfit, outfitForRole } from '../characters/outfitLoader';
+import { prepareGltfScene } from '../rendering/gltfMaterials';
 import type {World} from './World';
 /** Small in-world vendor. Uses the player's existing animated GLTF, not geometric humanoids. */
 export class ShopStall {
@@ -70,6 +72,8 @@ export class ShopStall {
    const scale=1.65/Math.max(1,size.y);
    person.scale.setScalar(scale);person.rotation.y=Math.PI;
    person.position.set(-(bounds.min.x+size.x*.5)*scale,-bounds.min.y*scale,-.42);
+   prepareGltfScene(person);
+   await attachOutfit(person, outfitForRole('merchant', false));
    this.root.add(person);
    const idle=motion.animations.find(c=>c.name.toLowerCase().includes('idle_loop'));
    if(idle){this.mixer=new THREE.AnimationMixer(person);this.mixer.clipAction(idle).play();}

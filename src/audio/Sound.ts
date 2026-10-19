@@ -18,7 +18,7 @@ export class Sound {
     const amount=!playing||!this.enabled?0:(swimming?.055:flying?.035:biome==='desert'?.025:.012)*(charging?1.3:1)*this.volume;
     this.ambient.gain.setTargetAtTime(amount,ctx.currentTime,.2);
     this.filter!.frequency.setTargetAtTime(swimming?900:flying?650:300,ctx.currentTime,.3);
-    if(playing&&speed>.4&&!flying){this.stepClock+=dt*Math.min(3,speed/2.2);if(this.stepClock>.5){this.stepClock=0;this.play(swimming?'water':biome==='snow'?'snow':biome==='desert'?'sand':'step');}}
+    if(playing&&speed>.4&&!flying){this.stepClock+=dt*Math.min(3,speed/2.2);if(this.stepClock>.5){this.stepClock=0;this.play(swimming?'water':biome==='snow'?'snow':biome==='desert'?'sand':biome==='crimson'?'sand':'step');}}
   }
 
   private get audio(): AudioContext | null {

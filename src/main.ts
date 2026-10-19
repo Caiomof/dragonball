@@ -1,7 +1,9 @@
 import './style.css';
 import { Game } from './core/Game';
+import { setupOrigensModal } from './ui/origensModal';
 
 try {
+  setupOrigensModal();
   new Game();
 } catch (error) {
   console.error('Falha na inicialização do DragonBallRPG:', error);
